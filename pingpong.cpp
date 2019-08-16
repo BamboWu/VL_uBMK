@@ -25,6 +25,7 @@ boost::lockfree::queue<ball_t> right_lockfree {CAPACITY / sizeof(ball_t)};
 
 int left_vl_fd;
 int right_vl_fd;
+vlendpt_t left_prod_vl, left_cons_vl, right_prod_vl, right_cons_vl;
 
 struct playerArgs {
     bool *pwait; // all threads controlled by main for timing/statistic
@@ -43,7 +44,6 @@ player(playerArgs *pargs) {
     uint64_t *pdouble;
     bool valid;
     double sum;
-    vlendpt_t send_vl, recv_vl;
 
     // set affinity
     cpu_set_t cpuset;
@@ -87,13 +87,8 @@ player(playerArgs *pargs) {
         }
       }
     } else if ('V' == pargs->mech) {
-      if (left) {
-        open_double_vl_as_producer(left_vl_fd, &send_vl, 1);
-        open_double_vl_as_consumer(right_vl_fd, &recv_vl, 1);
-      } else {
-        open_double_vl_as_producer(right_vl_fd, &send_vl, 1);
-        open_double_vl_as_consumer(left_vl_fd, &recv_vl, 1);
-      }
+      vlendpt_t *psend_vl = left ? &left_prod_vl : &right_prod_vl;
+      vlendpt_t *precv_vl = left ? &right_cons_vl : &left_cons_vl;
       while (*(pargs->pwait)) {
         std::this_thread::sleep_for(std::chrono::nanoseconds(1));
       }
@@ -104,13 +99,13 @@ player(playerArgs *pargs) {
           for (uint64_t i = 0; 7 > i; ++i) {
             ball[i] = 0.0714 * r / round + i / 42.0;
             pdouble = (uint64_t*)&ball[i];
-            double_vl_push_strong(&send_vl, *pdouble);
+            double_vl_push_strong(psend_vl, *pdouble);
           }
           my_serve = false;
         } else {
           for (uint64_t i = 0; 7 > i;) {
             pdouble = (uint64_t*)&ball[i];
-            double_vl_pop_non(&recv_vl, pdouble, &valid);
+            double_vl_pop_non(precv_vl, pdouble, &valid);
             if (valid) {
               i++;
             } else {
@@ -127,8 +122,6 @@ player(playerArgs *pargs) {
           my_serve = true;
         }
       }
-      close_double_vl_as_producer(send_vl);
-      close_double_vl_as_consumer(recv_vl);
     }
 }
 
@@ -144,6 +137,8 @@ int main(int argc, char *argv[]) {
         round = atoll(argv[2]);
     }
 
+    std::cout << argv[0] << " " << mech << " " << round << std::endl;
+
     if ('f' == mech) { // do not mkvl() for freelock, since no rmvl() following
     } else {
         left_vl_fd = mkvl();
@@ -151,11 +146,15 @@ int main(int argc, char *argv[]) {
             std::cerr << "mkvl() return invalid file descriptor\n";
             return left_vl_fd;
         }
+        open_double_vl_as_producer(left_vl_fd, &left_prod_vl, 1);
+        open_double_vl_as_consumer(left_vl_fd, &left_cons_vl, 1);
         right_vl_fd = mkvl();
         if (0 > right_vl_fd) {
             std::cerr << "mkvl() return invalid file descriptor\n";
             return right_vl_fd;
         }
+        open_double_vl_as_producer(right_vl_fd, &right_prod_vl, 1);
+        open_double_vl_as_consumer(right_vl_fd, &right_cons_vl, 1);
     }
 
     std::cout << "There are " << get_nprocs() << " CPUs available.\n";
@@ -204,6 +203,14 @@ int main(int argc, char *argv[]) {
         --seconds;
     }
     std::cout << seconds << "s " << nanosec << "ns elapsed\n";
+
+    if ('f' == mech) {
+    } else { // clean up
+        close_double_vl_as_producer(left_prod_vl);
+        close_double_vl_as_consumer(left_cons_vl);
+        close_double_vl_as_producer(right_prod_vl);
+        close_double_vl_as_consumer(right_cons_vl);
+    }
 
     return 0;
 }

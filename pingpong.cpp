@@ -29,9 +29,13 @@
 using ball_t = std::uint64_t;
 
 #ifdef VL
-int left_vl_fd;
-int right_vl_fd;
-vlendpt_t left_prod_vl, left_cons_vl, right_prod_vl, right_cons_vl;
+int         left_vl_fd;
+int         right_vl_fd;
+
+vlendpt_t   left_prod_vl, 
+            left_cons_vl, 
+            right_prod_vl, 
+            right_cons_vl;
 
 #else /** not defined VL **/
 using boost_q_t = boost::lockfree::queue< ball_t >;
@@ -39,10 +43,15 @@ boost_q_t left_lockfree  ( CAPACITY / sizeof(ball_t) );
 boost_q_t right_lockfree ( CAPACITY / sizeof(ball_t) );
 #endif
 
+/** 
+ * used to act as a marker flag for when all 
+ * threads are ready, actual declaration is 
+ * in main. 
+ */
 using atomic_t = std::atomic< int >;
 
 
-struct alignas( 64 ) playerArgs 
+struct alignas( 64 ) /** align to 64B boundary **/ playerArgs 
 {
     std::uint64_t       round;
 #ifdef VL
@@ -57,12 +66,12 @@ struct alignas( 64 ) playerArgs
 void
 player1( playerArgs const *pargs, atomic_t &ready ) 
 {
-    affinity::set( 12 );
+    affinity::set( 0 );
 
-    auto round          ( pargs->round  );
+    auto round( pargs->round  );
     
-    auto *psend( pargs->ql );
-    auto *precv( pargs->qr );
+    auto * const psend( pargs->ql );
+    auto * const precv( pargs->qr );
     
     ball_t  ball( 0 );
 
@@ -90,9 +99,9 @@ void
 player2( playerArgs const *pargs, atomic_t &ready ) 
 {
 
-    auto round          ( pargs->round  );
+    auto round( pargs->round  );
     
-    affinity::set( 47 );
+    affinity::set( 24  );
     
     auto *psend( pargs->qr );
     auto *precv( pargs->ql );
@@ -188,7 +197,7 @@ int main( int argc, char **argv )
     const auto time_duration( std::chrono::duration_cast< std::chrono::nanoseconds >( end - start ) ); 
     
     std::cout << time_duration.count() << "ns elapsed\n";
-    std::cout << time_duration.count() / round / 2 << "ns average per trip\n";
+    std::cout << time_duration.count() / round /** #rounds **/ / 2 /** #queue trips per round **/ << "ns average per trip\n";
         
 #ifdef VL        
     close_double_vl_as_producer( left_prod_vl   );

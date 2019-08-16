@@ -64,7 +64,7 @@ struct alignas( 64 ) /** align to 64B boundary **/ playerArgs
 };
 
 void
-player1( playerArgs const *pargs, atomic_t &ready ) 
+player1( playerArgs const * const pargs, atomic_t &ready ) 
 {
     affinity::set( 0 );
 
@@ -96,7 +96,7 @@ player1( playerArgs const *pargs, atomic_t &ready )
 }
 
 void
-player2( playerArgs const *pargs, atomic_t &ready ) 
+player2( playerArgs const * const pargs, atomic_t &ready ) 
 {
 
     auto round( pargs->round  );

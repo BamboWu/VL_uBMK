@@ -101,7 +101,7 @@ player2( playerArgs const *pargs, atomic_t &ready )
 
     auto round( pargs->round  );
     
-    affinity::set( 24  );
+    affinity::set( 1  );
     
     auto *psend( pargs->qr );
     auto *precv( pargs->ql );

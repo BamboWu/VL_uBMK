@@ -1,8 +1,8 @@
 AR = ar
 CC = gcc
 CXX = g++
-CCFLAGS = -O3 -g -Wall -std=c89
-CXXFLAGS = -O3 -g -Wall -std=gnu++14
+CFLAGS = -O3  -Wall -std=c99
+CXXFLAGS = -O3 -mtune=native -Wall -std=gnu++14
 SOFLAGS = -fPIC -shared
 
 THREAD_LIB = -pthread -Wl,--whole-archive -lpthread -Wl,--no-whole-archive

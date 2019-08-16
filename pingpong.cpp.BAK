@@ -44,7 +44,10 @@ using atomic_t = std::atomic< int >;
 
 struct alignas( 64 ) playerArgs 
 {
+    bool                *pwait  = nullptr; // all threads controlled by main for timing/statistic
+    char                mech;
     std::uint64_t       round;
+    bool                left; // left player initiate the ping-pong
 #ifdef VL
 
 #else
@@ -55,17 +58,54 @@ struct alignas( 64 ) playerArgs
 };
 
 void
-player1( playerArgs const *pargs, atomic_t &ready ) 
+player( playerArgs const *pargs, atomic_t &ready ) 
 {
-    affinity::set( 12 );
 
     auto round          ( pargs->round  );
+    const bool left     ( pargs->left   );
     
-    auto *psend( pargs->ql );
-    auto *precv( pargs->qr );
-    
-    ball_t  ball( 0 );
+    affinity::set( left ? 0 : 1 );
 
+#ifdef VL
+   vlendpt_t *psend_vl = left ? &left_prod_vl : &right_prod_vl;
+   vlendpt_t *precv_vl = left ? &right_cons_vl : &left_cons_vl;
+   while (*(pargs->pwait)) {
+     std::this_thread::sleep_for(std::chrono::nanoseconds(1));
+   }
+   for (uint64_t r = 1; round >= r; ++r) {
+     std::cout << (left ? "L" : "R") << " @ CPU " << sched_getcpu() << "\n";
+
+     if (my_serve) {
+       for (uint64_t i = 0; 7 > i; ++i) {
+         ball[i] = 0.0714 * r / round + i / 42.0;
+         pdouble = (uint64_t*)&ball[i];
+         double_vl_push_strong(psend_vl, *pdouble);
+       }
+       my_serve = false;
+     } else {
+       for (uint64_t i = 0; 7 > i;) {
+         pdouble = (uint64_t*)&ball[i];
+         double_vl_pop_non(precv_vl, pdouble, &valid);
+         if (valid) {
+           i++;
+         } else {
+           std::this_thread::sleep_for(std::chrono::nanoseconds(1));
+         }
+       }
+       sum = 0;
+       for (uint64_t i = 0; 7 > i; ++i) {
+         sum += ball[i];
+         //std::cout << "ball[" << i << "]=" << ball[i] << std::endl;
+       }
+       std::cout << "\033[92m" << (left ? "L " : "R ") << sum <<
+         "\033[0m\n";
+       my_serve = true;
+     }
+   }
+#else /** boost **/
+    auto *psend( left ? pargs->ql : pargs->qr );
+    auto *precv( left ? pargs->qr : pargs->ql );
+    
     /** we're ready to start **/
     ready++;
     
@@ -74,43 +114,24 @@ player1( playerArgs const *pargs, atomic_t &ready )
     
     /** we're ready to get started, both initialized **/
     
-    while( round--  )
+    while( --round  )
     {
 #if DEBUG                
-        std::cout << (left ? "L" : "R") << " @ CPU " << sched_getcpu() << "\n";
+    std::cout << (left ? "L" : "R") << " @ CPU " << sched_getcpu() << "\n";
 #endif
-        while( ! psend->push( ball++ ) );
-        ball_t receipt;
-        while( ! precv->pop( receipt ) );
-    } 
-    return; /** end of player function **/
-}
-
-void
-player2( playerArgs const *pargs, atomic_t &ready ) 
-{
-
-    auto round          ( pargs->round  );
-    
-    affinity::set( 47 );
-    
-    auto *psend( pargs->qr );
-    auto *precv( pargs->ql );
-    
-    /** we're ready to start **/
-    ready++;
-    
-    while( ready != 2 ){ /** spin **/ };
-    
-    
-    /** we're ready to get started, both initialized **/
-    
-    while( round--  )
-    {
-        ball_t ball;
-        while( ! precv->pop( ball ) );
-        while( ! psend->push( ball ) );
-    } 
+       if( left ) 
+       {
+           while( ! psend->push( ball++ ) );
+           while( ! precv->pop( ball ) );
+           std::cout << ball << "\n";
+       }
+       else /** not my serve **/
+       {
+           while( ! precv->pop( ball ) );
+           while( ! psend->push( ball ) );
+       }
+   } 
+#endif /** end mechanism selection **/          
     return; /** end of player function **/
 }
 
@@ -150,6 +171,7 @@ int main( int argc, char **argv )
     playerArgs args[2];
 
     args[0].round   = round;
+    args[0].left    = true;
 #ifdef VL
 
 #else
@@ -157,6 +179,7 @@ int main( int argc, char **argv )
     args[0].qr      = &right_lockfree;
 #endif
     args[1].round   = round;
+    args[1].left    = false;
 #ifdef VL
 
 #else
@@ -166,8 +189,8 @@ int main( int argc, char **argv )
 
 
 
-    std::thread playerl( player1, &args[0], std::ref( ready ) );
-    std::thread playerr( player2, &args[1], std::ref( ready ) );
+    std::thread playerl( player, &args[0], std::ref( ready ) );
+    std::thread playerr( player, &args[1], std::ref( ready ) );
     
     const auto start( std::chrono::high_resolution_clock::now() );
 

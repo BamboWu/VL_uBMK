@@ -13,10 +13,10 @@
 
 #include "affinity.hpp"
 
+#include <boost/lockfree/queue.hpp>
+
 #ifdef VL
 #include <vl.h>
-#else
-#include <boost/lockfree/queue.hpp>
 #endif
 
 #ifdef GEM5
@@ -26,158 +26,202 @@
 
 #define CAPACITY 4096
 
-using ball_t = std::uint64_t;
+using ball_t = union {
+  std::uint64_t val;
+  std::uint8_t arr[8];
+};
+
+using boost_q_t = boost::lockfree::queue< ball_t >;
+
+boost_q_t mosi_boost  ( CAPACITY / sizeof(ball_t) );
+boost_q_t miso_boost ( CAPACITY / sizeof(ball_t) );
 
 #ifdef VL
-int         left_vl_fd;
-int         right_vl_fd;
+int mosi_vl_fd,
+    miso_vl_fd;
 
-vlendpt_t   left_prod_vl, 
-            left_cons_vl, 
-            right_prod_vl, 
-            right_cons_vl;
+struct vl_q_t {
+  vlendpt_t in;
+  vlendpt_t out;
+  bool push(ball_t ball) { double_vl_push_strong(&in, ball.val); return true; }
+  bool pop(ball_t &ball) {
+    bool valid;
+    double_vl_pop_non(&out, &ball.val, &valid);
+    return valid;
+  }
+  void open(int fd, int num_cachelines = 1) {
+    open_double_vl_as_producer(fd, &in, num_cachelines);
+    open_double_vl_as_consumer(fd, &out, num_cachelines);
+  }
+  void close() {
+    close_double_vl_as_producer(in);
+    close_double_vl_as_consumer(out);
+  }
+  ~vl_q_t() { close(); }
+};
 
-#else /** not defined VL **/
-using boost_q_t = boost::lockfree::queue< ball_t >;
-boost_q_t left_lockfree  ( CAPACITY / sizeof(ball_t) );
-boost_q_t right_lockfree ( CAPACITY / sizeof(ball_t) );
+vl_q_t mosi_vl,
+       miso_vl;
+
 #endif
 
-/** 
- * used to act as a marker flag for when all 
- * threads are ready, actual declaration is 
- * in main. 
+/**
+ * used to act as a marker flag for when all
+ * threads are ready, actual declaration is
+ * in main.
  */
 using atomic_t = std::atomic< int >;
 
 
-struct alignas( 64 ) /** align to 64B boundary **/ playerArgs 
+struct alignas( 64 ) /** align to 64B boundary **/ playerArgs
 {
+    std::uint64_t       burst;
     std::uint64_t       round;
 #ifdef VL
-
+    vl_q_t              *qmosi  = nullptr;
+    vl_q_t              *qmiso  = nullptr;
 #else
-    boost_q_t           *ql     = nullptr;
-    boost_q_t           *qr     = nullptr;
+    boost_q_t           *qmosi  = nullptr;
+    boost_q_t           *qmiso  = nullptr;
 #endif
-    char padd[ 4096 ]; /** make darned sure these aren't on the same cache line **/
 };
 
 void
-player1( playerArgs const * const pargs, atomic_t &ready ) 
+ping( playerArgs const * const pargs, atomic_t &ready )
 {
     affinity::set( 0 );
 
-    auto round( pargs->round  );
-    
-    auto * const psend( pargs->ql );
-    auto * const precv( pargs->qr );
-    
-    ball_t  ball( 0 );
+    auto round( pargs->round );
+
+    std::uint64_t const burst( pargs->burst );
+
+    auto * const psend( pargs->qmosi );
+    auto * const precv( pargs->qmiso );
+
+    ball_t  ball = { 0 };
+    ball_t  receipt;
 
     /** we're ready to start **/
     ready++;
-    
+
     while( ready != 2 ){ /** spin **/ };
-    
-    
+
+
     /** we're ready to get started, both initialized **/
-    
-    while( round--  )
+
+    while( round-- )
     {
-#if DEBUG                
-        std::cout << (left ? "L" : "R") << " @ CPU " << sched_getcpu() << "\n";
+#if VERBOSE
+        std::cout << "M @ CPU " << sched_getcpu() << "\n";
 #endif
-        while( ! psend->push( ball++ ) );
-        ball_t receipt;
-        while( ! precv->pop( receipt ) );
-    } 
+        for (std::uint64_t i = 0; i < burst; ++i) {
+          while( ! psend->push( ball ) );
+          ball.val++;
+        }
+        for (std::uint64_t i = 0; i < burst; ++i) {
+          while( ! precv->pop( receipt ) );
+#if VERBOSE
+          std::cout << (uint64_t)receipt.arr[0] << " " <<
+            receipt.val << std::endl;
+#endif
+        }
+        ball.val += 256;
+    }
     return; /** end of player function **/
 }
 
 void
-player2( playerArgs const * const pargs, atomic_t &ready ) 
+pong( playerArgs const * const pargs, atomic_t &ready )
 {
 
-    auto round( pargs->round  );
+    affinity::set( 1 );
+
+    auto round( pargs->round );
+
+    std::uint64_t const burst( pargs->burst );
+
+    auto * const psend( pargs->qmiso );
+    auto * const precv( pargs->qmosi );
     
-    affinity::set( 1  );
-    
-    auto *psend( pargs->qr );
-    auto *precv( pargs->ql );
-    
+    ball_t ball;
+
     /** we're ready to start **/
     ready++;
-    
+
     while( ready != 2 ){ /** spin **/ };
-    
-    
+
+
     /** we're ready to get started, both initialized **/
-    
-    while( round--  )
+
+    while( round-- )
     {
-        ball_t ball;
-        while( ! precv->pop( ball ) );
-        while( ! psend->push( ball ) );
-    } 
+        for (std::uint64_t i = 0; i < burst; ++i) {
+          while( ! precv->pop( ball ) );
+          while( ! psend->push( ball ) );
+        }
+    }
     return; /** end of player function **/
 }
 
-int main( int argc, char **argv ) 
+int main( int argc, char **argv )
 {
+    uint64_t burst = 7;
     uint64_t round = 10;
-    
-    if( argc == 2 ) 
+
+    if( 2 < argc )
+    {
+        burst = atoll( argv[2] );
+    }
+    if( 1 < argc )
     {
         round = atoll( argv[1] );
     }
-    else
-    {
-        std::cerr << "usage is: " << argv[0] << " <#rounds>\n";
-        exit( EXIT_FAILURE );
-    }
+    std::cout << argv[0] << " round=" << round << " burst=" << burst << "\n";
 
 #ifdef VL
-        left_vl_fd = mkvl();
-        if (0 > left_vl_fd) {
-            std::cerr << "mkvl() return invalid file descriptor\n";
-            return left_vl_fd;
-        }
-        open_double_vl_as_producer(left_vl_fd, &left_prod_vl, 1);
-        open_double_vl_as_consumer(left_vl_fd, &left_cons_vl, 1);
-        right_vl_fd = mkvl();
-        if (0 > right_vl_fd) {
-            std::cerr << "mkvl() return invalid file descriptor\n";
-            return right_vl_fd;
-        }
-        open_double_vl_as_producer(right_vl_fd, &right_prod_vl, 1);
-        open_double_vl_as_consumer(right_vl_fd, &right_cons_vl, 1);
+    mosi_vl_fd = mkvl();
+    if (0 > mosi_vl_fd) {
+        std::cerr << "mkvl() return invalid file descriptor\n";
+        return mosi_vl_fd;
+    }
+    mosi_vl.open(mosi_vl_fd);
+    miso_vl_fd = mkvl();
+    if (0 > miso_vl_fd) {
+        std::cerr << "mkvl() return invalid file descriptor\n";
+        return miso_vl_fd;
+    }
+    miso_vl.open(miso_vl_fd);
+#ifdef VERBOSE
+    std::cout << "VL queues opened\n";
+#endif
 #endif /** end initiation of VL **/
 
     atomic_t    ready( -1 );
 
     playerArgs args[2];
 
+    args[0].burst   = burst;
     args[0].round   = round;
 #ifdef VL
-
+    args[0].qmosi   = &mosi_vl;
+    args[0].qmiso   = &miso_vl;
 #else
-    args[0].ql      = &left_lockfree;
-    args[0].qr      = &right_lockfree;
+    args[0].qmosi   = &mosi_boost;
+    args[0].qmiso   = &miso_boost;
 #endif
+    args[1].burst   = burst;
     args[1].round   = round;
 #ifdef VL
-
+    args[1].qmosi   = &mosi_vl;
+    args[1].qmiso   = &miso_vl;
 #else
-    args[1].ql      = &left_lockfree;
-    args[1].qr      = &right_lockfree;
+    args[1].qmosi   = &mosi_boost;
+    args[1].qmiso   = &miso_boost;
 #endif
 
+    std::thread playerm( ping, &args[0], std::ref( ready ) );
+    std::thread players( pong, &args[1], std::ref( ready ) );
 
-
-    std::thread playerl( player1, &args[0], std::ref( ready ) );
-    std::thread playerr( player2, &args[1], std::ref( ready ) );
-    
     const auto start( std::chrono::high_resolution_clock::now() );
 
 #ifdef GEM5
@@ -186,24 +230,27 @@ int main( int argc, char **argv )
 
     ready++;
 
-    playerl.join();
-    playerr.join();
+    playerm.join();
+    players.join();
 
 #ifdef GEM5
     m5_dump_reset_stats(0, 0);
 #endif
 
     const auto end( std::chrono::high_resolution_clock::now() );
-    const auto time_duration( std::chrono::duration_cast< std::chrono::nanoseconds >( end - start ) ); 
-    
-    std::cout << time_duration.count() << "ns elapsed\n";
-    std::cout << time_duration.count() / round /** #rounds **/ / 2 /** #queue trips per round **/ << "ns average per trip\n";
-        
-#ifdef VL        
-    close_double_vl_as_producer( left_prod_vl   );
-    close_double_vl_as_consumer( left_cons_vl   );
-    close_double_vl_as_producer( right_prod_vl  );
-    close_double_vl_as_consumer( right_cons_vl  );
+    const auto elapsed(
+        std::chrono::duration_cast< std::chrono::nanoseconds >( end - start )
+        );
+
+    std::cout << elapsed.count() << "ns elapsed\n";
+    std::cout << elapsed.count() / round << "ns average per round(" <<
+      burst << " pushs " << burst << " pops)\n";
+
+#ifdef VL
+    // TODO: rmvl();
+#ifdef VERBOSE
+    std::cout << "VL released\n";
+#endif
 #endif
     return( EXIT_SUCCESS );
 }

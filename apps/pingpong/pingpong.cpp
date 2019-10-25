@@ -11,7 +11,7 @@
 #include <functional>
 #include <cstdlib>
 
-#include "affinity.hpp"
+#include "affinity.h"
 
 #include <boost/lockfree/queue.hpp>
 
@@ -89,7 +89,7 @@ struct alignas( 64 ) /** align to 64B boundary **/ playerArgs
 void
 ping( playerArgs const * const pargs, atomic_t &ready )
 {
-    affinity::set( 0 );
+    setAffinity( 0 );
 
     auto round( pargs->round );
 
@@ -134,7 +134,7 @@ void
 pong( playerArgs const * const pargs, atomic_t &ready )
 {
 
-    affinity::set( 1 );
+    setAffinity( 1 );
 
     auto round( pargs->round );
 

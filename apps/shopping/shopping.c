@@ -27,23 +27,13 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <unistd.h>
-#include <sched.h>
-#include <pthread.h>
+#ifdef NUMA_AVAILABLE
 #include <numa.h>
+#endif
 #include <sys/types.h>
-
-static __inline__ uint64_t rdtsc() {
-  unsigned hi, lo;
-  __asm__ __volatile__ ( "rdtsc" : "=a"(lo), "=d"(hi));
-  return ( (uint64_t)lo) | ( ((uint64_t)hi) << 32);
-}
-
-#define checkResults(string, val) {             \
- if (val) {                                     \
-   printf("Failed with %d at %s", val, string); \
-   exit(1);                                     \
- }                                              \
-}
+#include "affinity.h"
+#include "timing.h"
+#include "check.h"
 
 volatile int wait_to_begin = 1;
 int max_node_num;
@@ -117,25 +107,6 @@ typedef struct cart_s {
 cart_t cart;
 
 /*
- * Bind a thread to the specified core.
-*/
-void setAffinity(void *parm) {
-   volatile uint64_t rc, j;
-   cpu_set_t cpuset;
-   pthread_t thread = pthread_self();
-   int core = ((candy_lover_t *)parm)->cid;
-   char *name = ((candy_lover_t *)parm)->name;
-
-   CPU_ZERO(&cpuset);
-   CPU_SET(core, &cpuset);
-
-   rc = pthread_setaffinity_np(thread, sizeof(cpu_set_t), &cpuset);
-   checkResults("pthread_setaffinity_np()", rc);
-   pthread_setname_np(thread, name);
-   checkResults("pthread_setname_np()", rc);
-}
-
-/*
  * Thread function to simulate the false sharing.
  * The threads will add_and_fetch subtotal field,
  * and read the other fields in the struct.
@@ -145,13 +116,16 @@ extern void *shopping_together(void *parm) {
   uint64_t beg, end;
   int64_t budget = ((candy_lover_t *)parm)->budget;
   const int *pattern = ((candy_lover_t *)parm)->pattern;
+  const int core = ((candy_lover_t *)parm)->cid;
+  const char *name = ((candy_lover_t *)parm)->name;
   int behavior = JUST_WATCH;
   uint64_t price = 0;
   uint64_t count = 0;
   uint64_t round = 0;
 
   // Pin each thread to a numa node.
-  setAffinity(parm);
+  setAffinity(core);
+  nameThread(name);
 
   // Wait for all threads to get created before starting.
   while (wait_to_begin);
@@ -204,7 +178,11 @@ extern void *shopping_together(void *parm) {
 
   pthread_t tid = ((candy_lover_t *)parm)->tid;
   int cpu = sched_getcpu();
+#ifdef NUMA_AVAILABLE
   int node = numa_node_of_cpu(cpu);
+#else
+  int node = 0;
+#endif
 
   printf("Thread %lu done on CPU %d node %d\n", tid, cpu, node);
 
@@ -271,7 +249,7 @@ int main ( int argc, char *argv[] )
     usleep(500);
   }
 
-  printf("mem[%#p] wait_to_begin\nmem[%#p] cart\n", &wait_to_begin, &cart);
+  printf("mem[%p] wait_to_begin\nmem[%p] cart\n", &wait_to_begin, &cart);
   cart.subtotal1 = cart.subtotal0 = 0;
   cart.reserved = 0;
   cart.MM = 2;

@@ -11,9 +11,6 @@ include(CheckCXXSourceCompiles)
 
 include_directories(${VL_uBMK_SOURCE_DIR}/include)
 
-find_package(Threads REQUIRED)
-find_package(Numa QUIET)
-
 set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
@@ -31,8 +28,5 @@ macro(add_microbenchmark NAME)
   endif()
   if(CMAKE_THREAD_LIBS_INIT)
     target_link_libraries(${NAME} "${CMAKE_THREAD_LIBS_INIT}")
-  endif()
-  if(NUMA_FOUND)
-    target_link_libraries(${NAME} "numa")
   endif()
 endmacro(add_microbenchmark)

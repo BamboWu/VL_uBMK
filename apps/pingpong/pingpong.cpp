@@ -6,13 +6,15 @@
 #include <array>
 #include <time.h>
 #include <cstdint>
-#include <atomic>
 #include <chrono>
 #include <functional>
 #include <cstdlib>
 
-#include "affinity.h"
-
+#ifdef GCCATOMIC
+#include <atomic>
+#else
+#include <boost/atomic.hpp>
+#endif
 #include <boost/lockfree/queue.hpp>
 
 #ifdef VL
@@ -23,6 +25,7 @@
 #include "gem5/m5ops.h"
 #endif
 
+#include "affinity.h"
 
 #define CAPACITY 4096
 
@@ -70,7 +73,11 @@ vl_q_t mosi_vl,
  * threads are ready, actual declaration is
  * in main.
  */
+#ifndef GCCATOMIC
+using atomic_t = boost::atomic< int >;
+#else
 using atomic_t = std::atomic< int >;
+#endif
 
 
 struct alignas( 64 ) /** align to 64B boundary **/ playerArgs

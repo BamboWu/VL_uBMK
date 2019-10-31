@@ -6,6 +6,7 @@ set(CMAKE_MODULE_PATH ${VL_uBMK_SOURCE_DIR}/cmake)
 
 include(CheckLibraryExists)
 include(CheckFunctionExists)
+include(CheckIncludeFile)
 include(ExternalProject)
 include(CheckCXXSourceCompiles)
 

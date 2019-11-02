@@ -12,7 +12,8 @@
 #module load boost/1.69
 
 ROOT_DIR=/export/bambo/bmkvl/VL_uBMK
-HW_INFO=$ROOT_DIR/scripts/jupiter.cfg
+PLATFORM=jupiter1
+HW_INFO=$ROOT_DIR/scripts/${PLATFORM}.cfg
 
 # sanity check
 if [ ! -e $HW_INFO ];
@@ -33,7 +34,7 @@ source $HW_INFO
 
 TIMESTAMP=`date +"%d%b%H%M"`
 BUILD_DIR=$ROOT_DIR/build
-DATA_DIR=$ROOT_DIR/data/${TIMESTAMP}_perf_shopping
+DATA_DIR=$ROOT_DIR/data/perf_shopping_${PLATFORM}_${TIMESTAMP}
 
 # prepare directories
 $EVAL "mkdir -p $BUILD_DIR $DATA_DIR"
@@ -47,11 +48,14 @@ $EVAL "make atomicFSh atomicPad directFSh"
 CPU_LIST=`echo $CPU_PREFERENCE | tr ',' ' '`
 CPU_LIST=($CPU_LIST)
 MAX_THREADS=$(( $NUM_SOCKETS * $CORES_PER_SOCKETS * $THREADS_PER_CORES ))
+$EVAL "lscpu"
 
 # compose test cases (1 writer 2^N readers)
+WRITER_BALANCE=1024000
+READER_BALANCE=8192000
 ntests=0
 nthreads=1
-tests[$ntests]="${CPU_LIST[0]} MMFan M 1024"
+tests[$ntests]="${CPU_LIST[0]} MMFan M $WRITER_BALANCE"
 while [[ $(($nthreads * 2)) -lt $MAX_THREADS ]];
 do
     ntests=$(($ntests + 1))
@@ -64,15 +68,10 @@ do
         # append thread name
         tests[$ntests]="${tests[$ntests]} Watcher${CPU_LIST[$nthreads]}"
         # append thread type ('W' is Watcher) and balance
-        tests[$ntests]="${tests[$ntests]} W 8192"
+        tests[$ntests]="${tests[$ntests]} W $READER_BALANCE"
         nthreads=$(($nthreads + 1))
     done
 done
-
-#for i in `seq 0 $ntests`;
-#do
-#    echo ${tests[$i]}
-#done
 
 # profile
 PERF_CMD="perf stat -e $PERF_COUNTERS"
@@ -89,3 +88,4 @@ do
     $ECHO "$PERF_CMD -o $DATA_DIR/perf$i.directFSh $DIRECTFSH ${tests[$i]}"
     $EVAL "$PERF_CMD -o $DATA_DIR/perf$i.directFSh $DIRECTFSH ${tests[$i]}"
 done
+$EVAL "lscpu"

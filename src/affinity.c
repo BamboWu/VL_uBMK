@@ -24,6 +24,6 @@ void setAffinity(const int desired_core) {
  */
 void nameThread(const char *desired_name) {
    int rc;
-   pthread_setname_np(pthread_self(), desired_name);
+   rc = pthread_setname_np(pthread_self(), desired_name);
    checkResults("pthread_setname_np()", rc);
 }

@@ -16,7 +16,7 @@ set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-#set(COMPILER_FLAGS "-Wall -g")
+add_compile_options("-Wall")
 
 subdirs(apps src)
 

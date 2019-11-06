@@ -1,4 +1,5 @@
 #include <stdint.h>
+#include "timing.h"
 
 /*
  * Read Time Stamp Counter (TSC)

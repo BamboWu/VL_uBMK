@@ -5,7 +5,7 @@
 extern "C" {
 #endif
 
-extern __inline__ uint64_t rdtsc();
+extern uint64_t rdtsc();
 
 #ifdef __cplusplus
 }

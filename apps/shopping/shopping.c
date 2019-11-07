@@ -26,6 +26,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <inttypes.h>
 #include <unistd.h>
 #ifdef NUMA_AVAILABLE
 #include <numa.h>
@@ -264,12 +265,12 @@ int main ( int argc, char *argv[] )
   for (i = 0; i < num_threads; ++i) {
      rc = pthread_join(candy_lovers[i].tid, NULL);
      checkResults("pthread_join()\n", rc);
-     printf("It took %ld ticks ", candy_lovers[i].ticks);
+     printf("It took %"PRIu64" ticks ", candy_lovers[i].ticks);
      printf("for %s ", candy_lovers[i].name);
-     printf("to go shopping %ld rounds ", candy_lovers[i].round);
-     printf("to get %ld candies\n", candy_lovers[i].count);
+     printf("to go shopping %"PRIu64" rounds ", candy_lovers[i].round);
+     printf("to get %"PRIu64" candies\n", candy_lovers[i].count);
   }
-  printf("Cart subtotal is %ld\n", cart.subtotal1);
+  printf("Cart subtotal is %"PRIu64"\n", cart.subtotal1);
 
   return 0;
 }

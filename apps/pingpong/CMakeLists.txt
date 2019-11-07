@@ -14,6 +14,7 @@ elseif(GCCLIBATOMIC_FOUND)
   find_file(Boost_LOCKFREE_QUEUE_HPP "boost/lockfree/queue.hpp"
             PATHS ${Boost_INCLUDE_DIRS})
   if(Boost_LOCKFREE_QUEUE_HPP)
+    include_directories(${Boost_INCLUDE_DIRS})
     add_microbenchmark(pingpong pingpong.cpp)
     set_target_properties(pingpong PROPERTIES COMPILE_DEFINITIONS "GCCATOMIC")
     target_link_libraries(pingpong atomic)

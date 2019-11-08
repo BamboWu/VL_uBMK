@@ -1,33 +1,63 @@
 #include <iostream>
-#include <pthread.h>
-#include <sys/sysinfo.h>
-#include <thread>
-#include <chrono>
-#include <array>
-#include <time.h>
 #include <cstdint>
-#include <chrono>
-#include <functional>
 #include <cstdlib>
-
-#ifdef GCCATOMIC
-#include <atomic>
-#else
-#include <boost/atomic.hpp>
-#endif
 #include <boost/lockfree/queue.hpp>
 
+#ifndef STDATOMIC
+#include <boost/atomic.hpp>
+#else
+#include <atomic>
+#endif
+#ifndef STDTHREAD
+#include <boost/thread.hpp>
+#else
+#include <thread>
+#endif
+#ifndef STDCHRONO
+#include <boost/chrono.hpp>
+#else
+#include <chrono>
+#endif
+
+#include "affinity.h"
+#include "timing.h"
+
 #ifdef VL
-#include <vl.h>
+#include "vl.h"
 #endif
 
 #ifdef GEM5
 #include "gem5/m5ops.h"
 #endif
 
-#include "affinity.h"
-
 #define CAPACITY 4096
+
+/**
+ * used to act as a marker flag for when all
+ * threads are ready, actual declaration is
+ * in main.
+ */
+#ifndef STDATOMIC
+using atomic_t = boost::atomic< int >;
+#else
+using atomic_t = std::atomic< int >;
+#endif
+
+#ifndef STDTHREAD
+using boost::thread;
+#else
+using std::thread;
+#endif
+
+#ifndef STDCHRONO
+using boost::chrono::high_resolution_clock;
+using boost::chrono::duration_cast;
+using boost::chrono::nanoseconds;
+#else
+using std::chrono::high_resolution_clock;
+using std::chrono::duration_cast;
+using std::chrono::nanoseconds;
+#endif
 
 using ball_t = union {
   std::uint64_t val;
@@ -67,18 +97,6 @@ vl_q_t mosi_vl,
        miso_vl;
 
 #endif
-
-/**
- * used to act as a marker flag for when all
- * threads are ready, actual declaration is
- * in main.
- */
-#ifndef GCCATOMIC
-using atomic_t = boost::atomic< int >;
-#else
-using atomic_t = std::atomic< int >;
-#endif
-
 
 struct alignas( 64 ) /** align to 64B boundary **/ playerArgs
 {
@@ -226,10 +244,11 @@ int main( int argc, char **argv )
     args[1].qmiso   = &miso_boost;
 #endif
 
-    std::thread playerm( ping, &args[0], std::ref( ready ) );
-    std::thread players( pong, &args[1], std::ref( ready ) );
+    thread playerm( ping, &args[0], std::ref( ready ) );
+    thread players( pong, &args[1], std::ref( ready ) );
 
-    const auto start( std::chrono::high_resolution_clock::now() );
+    const uint64_t beg_tsc = rdtsc();
+    const auto beg( high_resolution_clock::now() );
 
 #ifdef GEM5
     m5_reset_stats(0, 0);
@@ -244,13 +263,13 @@ int main( int argc, char **argv )
     m5_dump_reset_stats(0, 0);
 #endif
 
-    const auto end( std::chrono::high_resolution_clock::now() );
-    const auto elapsed(
-        std::chrono::duration_cast< std::chrono::nanoseconds >( end - start )
-        );
+    const uint64_t end_tsc = rdtsc();
+    const auto end( high_resolution_clock::now() );
+    const auto elapsed( duration_cast< nanoseconds >( end - beg ) );
 
-    std::cout << elapsed.count() << "ns elapsed\n";
-    std::cout << elapsed.count() / round << "ns average per round(" <<
+    std::cout << ( end_tsc - beg_tsc ) << " ticks elapsed\n";
+    std::cout << elapsed.count() << " ns elapsed\n";
+    std::cout << elapsed.count() / round << " ns average per round (" <<
       burst << " pushs " << burst << " pops)\n";
 
 #ifdef VL

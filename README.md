@@ -3,7 +3,7 @@ Virtual Link Microbenchmarks
 
 Compile
 -------
-~~~bash
+~~~shell
 mkdir -p build
 cd build
 cmake -DBOOST_ROOT=<path to boost library> ../
@@ -20,7 +20,7 @@ Microbenchmarks
 ### pingpong
 Two threads transfer data back and forth.
 To run on real hardware (needs boost library installed):
-~~~bash
+~~~shell
 ./pingpong_native 10 7
 ~~~
 Binary takes two optional position arguments, first is round, second is burst.
@@ -68,7 +68,7 @@ Example hardware configurations are also available in `scripts` folder:
 `scripts/jupiter1.cfg` for LCA jupiter1 server.
 After making the hardware configuration file and modifying the variables,
 you may have a preview of the commands the script is going to execute:
-~~~bash
+~~~shell
 scripts/perf_shopping.slurm preview
 ~~~
 To conduct the profiling:
@@ -86,10 +86,22 @@ One script to parse data and make table: `scripts/tab_shopping.py`
 The script operates on the perf outputs and the output from the microbenchmark.
 For example, assume the perf outputs are in `data/perf_shopping_SKX_30Sep1855`
 and the output is redirected to `perf_shopping.o.123`:
-~~~bash
+~~~shell
 mv perf_shopping.o.123 data/perf_shopping_SKX_30Sep1855/
 scripts/tab_shopping.py data/perf_shopping_SKX_30Sep1855
 ~~~
 The script will print out a table in Tab Seperated Value (TSV) format,
 so you can copy and paste into a Google spreadsheet or Excel,
 or just redirect the output to `.tsv` file.
+
+### shuffler
+This is designed to generate enough random accesses,
+in order to "reinitialize" the state of cache hierarchy.
+It takes number of physical cores and LLC capacity as argument.
+Each physical core runs a thread to update a shared table,
+until every entry in the table counts up to target, 256.
+The totoal memory consumption should sum up to about the given capacity of LLC.
+For example, to run it on a 6-core processor with 15MB LLC:
+~~~shell
+./shuffler SpD 6 15728640
+~~~

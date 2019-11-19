@@ -42,35 +42,48 @@ $EVAL "mkdir -p $BUILD_DIR $DATA_DIR"
 # make the executables
 $EVAL "cd $BUILD_DIR"
 $EVAL "cmake ../"
-$EVAL "make atomicFSh atomicPad directFSh"
+$EVAL "make atomicFSh atomicPad directFSh shuffler"
 
 # processing hardware information
 CPU_LIST=`echo $CPU_PREFERENCE | tr ',' ' '`
 CPU_LIST=($CPU_LIST)
 MAX_THREADS=$(( $NUM_SOCKETS * $CORES_PER_SOCKETS * $THREADS_PER_CORES ))
+MAX_CORES=$(( $NUM_SOCKETS * $CORES_PER_SOCKETS ))
 $EVAL "lscpu"
 
 # compose test cases (1 writer 2^N readers)
 WRITER_BALANCE=1024000
 READER_BALANCE=8192000
 ntests=0
-nthreads=1
-tests[$ntests]="${CPU_LIST[0]} MMFan M $WRITER_BALANCE"
-while [[ $(($nthreads * 2)) -lt $MAX_THREADS ]];
+nreaders=0
+while [[ $((1 + $nreaders)) -lt $MAX_THREADS ]];
 do
-    ntests=$(($ntests + 1))
-    tests[$ntests]=${tests[0]}
-    nthreads=1
-    for i in `seq 1 $((2**($ntests - 1)))`;
+    tests[$ntests]=""
+    for i in `seq 0 $nreaders`;
     do
         # append CPU id
-        tests[$ntests]="${tests[$ntests]} ${CPU_LIST[$nthreads]}"
-        # append thread name
-        tests[$ntests]="${tests[$ntests]} Watcher${CPU_LIST[$nthreads]}"
-        # append thread type ('W' is Watcher) and balance
-        tests[$ntests]="${tests[$ntests]} W $READER_BALANCE"
-        nthreads=$(($nthreads + 1))
+        tests[$ntests]="${tests[$ntests]} ${CPU_LIST[$i]}"
+        if [[ $i -eq $ntests ]];
+        then
+            # append thread name
+            tests[$ntests]="${tests[$ntests]} MMFan${CPU_LIST[$i]}"
+            # append thread type ('M' is MMFan) and balance
+            tests[$ntests]="${tests[$ntests]} M $READER_BALANCE"
+        else
+            # append thread name
+            tests[$ntests]="${tests[$ntests]} Watcher${CPU_LIST[$i]}"
+            # append thread type ('W' is Watcher) and balance
+            tests[$ntests]="${tests[$ntests]} W $READER_BALANCE"
+        fi
     done
+    nreaders=$((2**$ntests))
+    ntests=$(($ntests + 1))
+    # shift CPU_LIST
+    #CPU_LIST[$MAX_THREADS]=${CPU_LIST[0]}
+    #for i in `seq 0 $(($MAX_THREADS - 1))`;
+    #do
+    #    CPU_LIST[$i]=${CPU_LIST[$(($i + 1))]}
+    #done
 done
 
 # profile
@@ -79,12 +92,25 @@ PERF_CMD="perf stat -e $PERF_COUNTERS"
 ATOMICFSH=$BUILD_DIR/apps/shopping/atomicFSh
 ATOMICPAD=$BUILD_DIR/apps/shopping/atomicPad
 DIRECTFSH=$BUILD_DIR/apps/shopping/directFSh
-for i in `seq 0 $ntests`;
+SHUFFLER=$BUILD_DIR/apps/shuffler/shuffler
+for i in `seq 0 $(($ntests - 1))`;
 do
+    $ECHO "$SHUFFLER SpD $MAX_CORES $LLC_CAPACITY"
+    $EVAL "$SHUFFLER SpD $MAX_CORES $LLC_CAPACITY"
+    $ECHO "$SHUFFLER FSh $MAX_CORES $LLC_CAPACITY"
+    $EVAL "$SHUFFLER FSh $MAX_CORES $LLC_CAPACITY"
     $ECHO "$PERF_CMD -o $DATA_DIR/perf$i.atomicFSh $ATOMICFSH ${tests[$i]}"
     $EVAL "$PERF_CMD -o $DATA_DIR/perf$i.atomicFSh $ATOMICFSH ${tests[$i]}"
+    $ECHO "$SHUFFLER SpD $MAX_CORES $LLC_CAPACITY"
+    $EVAL "$SHUFFLER SpD $MAX_CORES $LLC_CAPACITY"
+    $ECHO "$SHUFFLER FSh $MAX_CORES $LLC_CAPACITY"
+    $EVAL "$SHUFFLER FSh $MAX_CORES $LLC_CAPACITY"
     $ECHO "$PERF_CMD -o $DATA_DIR/perf$i.atomicPad $ATOMICPAD ${tests[$i]}"
     $EVAL "$PERF_CMD -o $DATA_DIR/perf$i.atomicPad $ATOMICPAD ${tests[$i]}"
+    $ECHO "$SHUFFLER SpD $MAX_CORES $LLC_CAPACITY"
+    $EVAL "$SHUFFLER SpD $MAX_CORES $LLC_CAPACITY"
+    $ECHO "$SHUFFLER FSh $MAX_CORES $LLC_CAPACITY"
+    $EVAL "$SHUFFLER FSh $MAX_CORES $LLC_CAPACITY"
     $ECHO "$PERF_CMD -o $DATA_DIR/perf$i.directFSh $DIRECTFSH ${tests[$i]}"
     $EVAL "$PERF_CMD -o $DATA_DIR/perf$i.directFSh $DIRECTFSH ${tests[$i]}"
 done

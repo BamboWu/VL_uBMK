@@ -53,7 +53,7 @@ $EVAL "lscpu"
 
 # compose test cases (1 writer 2^N readers)
 WRITER_BALANCE=1024000
-READER_BALANCE=8192000
+READER_BALANCE=6553600000
 ntests=0
 nreaders=0
 while [[ $((1 + $nreaders)) -lt $MAX_THREADS ]];
@@ -68,7 +68,7 @@ do
             # append thread name
             tests[$ntests]="${tests[$ntests]} MMFan${CPU_LIST[$i]}"
             # append thread type ('M' is MMFan) and balance
-            tests[$ntests]="${tests[$ntests]} M $READER_BALANCE"
+            tests[$ntests]="${tests[$ntests]} M $WRITER_BALANCE"
         else
             # append thread name
             tests[$ntests]="${tests[$ntests]} Watcher${CPU_LIST[$i]}"

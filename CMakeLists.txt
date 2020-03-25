@@ -11,6 +11,12 @@ include(ExternalProject)
 include(CheckCXXSourceCompiles)
 
 include_directories(${VL_uBMK_SOURCE_DIR}/include)
+if(GEM5_ROOT)
+  include_directories(${GEM5_ROOT}/include)
+  link_directories(${GEM5_ROOT}/util/m5)
+else()
+  add_definitions(-DNOGEM5)
+endif()
 
 set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)

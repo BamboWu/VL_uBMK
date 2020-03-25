@@ -4,7 +4,7 @@
 #include <unistd.h>
 #include <pthread.h>
 
-#ifdef GEM5
+#ifndef NOGEM5
 #include "gem5/m5ops.h"
 #endif
 
@@ -89,13 +89,13 @@ int main(int argc, char *argv[]) {
   pthread_create(&threads[0], NULL, producer, NULL);
   pthread_create(&threads[1], NULL, consumer, NULL);
   const uint64_t beg = rdtsc();
-#ifdef GEM5
+#ifndef NOGEM5
   m5_reset_stats(0, 0);
 #endif
   r[0] = 'P';
   pthread_join(threads[0], NULL);
   pthread_join(threads[1], NULL);
-#ifdef GEM5
+#ifndef NOGEM5
   m5_dump_stats(0, 0);
 #endif
   const uint64_t end = rdtsc();

@@ -1,0 +1,18 @@
+project(VL_uBMK)
+
+cmake_minimum_required(VERSION 3.1)
+
+find_package(Zmq QUIET)
+
+if(ZMQ_STATIC_FOUND)
+    add_microbenchmark(echo echo.cpp)
+    target_include_directories(echo PRIVATE ${ZMQ_INCLUDE_DIR})
+    target_link_libraries(echo ${ZMQ_LIBRARY})
+    target_compile_options(echo PRIVATE -static -pthread)
+elseif(ZMQ_DYNAMIC_FOUND)
+    add_microbenchmark(echo echo.cpp)
+    target_include_directories(echo PRIVATE ${ZMQ_INCLUDE_DIR})
+    target_link_libraries(echo ${ZMQ_LIBRARY})
+elseif(NOT (ZMQ_STATIC_FOUND OR ZMQ_DYNAMIC_FOUND))
+    MESSAGE(STATUS "WARNING: No zmq library, skip echo.")
+endif()

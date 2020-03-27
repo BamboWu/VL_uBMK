@@ -41,8 +41,8 @@ union {
 void *producer(void *args) {
   setAffinity(0);
   int round;
-  while(64 <= (prod.round - cons.round)) { __asm__ volatile( "nop" ::: ); }
   for (round = 0; MAX_ROUND > round; ++round) {
+    while(64 <= (prod.round - cons.round)) { __asm__ volatile( "nop" ::: ); }
     uint8_t *cl = &cls[(round << 6) & 0x0FFF];
     uint64_t offset;
     for (offset = 0; MAX_LEN > offset; ++offset) {

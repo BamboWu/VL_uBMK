@@ -22,9 +22,13 @@
 #define MAX_ROUND   (1 << 20)
 #endif
 
+#define PRODUCER 0
+#define CONSUMER 1
+
 uint8_t *arr;
 
 uint8_t __attribute__((aligned(4096))) cls[4096]; // cachelines as circular buf
+uint8_t __attribute__((aligned(64))) unrelated[64]; // to compare performance
 
 uint8_t max[MAX_ROUND];
 
@@ -39,9 +43,10 @@ union {
 } volatile __attribute__((aligned(64))) cons = { .round = -64 };
 
 void *producer(void *args) {
-  setAffinity(0);
+  setAffinity(PRODUCER);
   int round;
   for (round = 0; MAX_ROUND > round; ++round) {
+    /** spin until consumer is ready **/
     while(64 <= (prod.round - cons.round)) { __asm__ volatile( "nop" ::: ); }
     uint8_t *cl = &cls[(round << 6) & 0x0FFF];
     uint64_t offset;
@@ -51,28 +56,31 @@ void *producer(void *args) {
 
 #ifdef NOSCE
     __asm__ volatile ( "nop" : : : );
-#elif defined(__x86_64__)
+#else
     __asm__ volatile (
+#if defined(__x86_64__)
         "      clflush (%[cl])     \n\r"
-        :
-        : [cl]"r" (cl)
-        : "memory"
-        );
-#elif __ARM_ARCH == 8
-    __asm__ volatile (
+#elif SCE_CVAC
+        "      dc cvac, %[cl]      \n\r"
+#elif SCE_CIVAC
         "      dc civac, %[cl]     \n\r"
+#endif
         :
+#ifdef UNRELATED_CACHELINE
+        : [cl]"r" (unrelated)
+#else
         : [cl]"r" (cl)
+#endif
         : "memory"
         );
-#endif
+#endif // !NOSCE
     prod.round = round + 1;
   }
   return NULL;
 }
 
 void *consumer(void *args) {
-  setAffinity(1);
+  setAffinity(CONSUMER);
   int round;
   for(round = 0; MAX_ROUND > round; ++round) {
     cons.round = round;
@@ -95,10 +103,11 @@ int main(int argc, char *argv[]) {
 #if SETSCHED
   int priority = sched_get_priority_max(SCHED_RR);
   struct sched_param sp = { .sched_priority = priority };
-  (void) /** ignore ret val **/
-  sched_setscheduler(0x0 /* this */,
-                     SCHED_RR,
-                     &sp);
+  if (0 != sched_setscheduler(0x0 /* this */,
+                              SCHED_RR,
+                              &sp)) {
+    perror("failed to set schedule");
+  }
 #endif
 
   arr = (uint8_t*) malloc(MAX_ROUND * MAX_LEN * sizeof(uint8_t));

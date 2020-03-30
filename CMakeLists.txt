@@ -22,6 +22,14 @@ set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+execute_process(COMMAND grep -l 'rdtscp' /proc/cpuinfo
+    OUTPUT_VARIABLE CPU_HAS_RDTSCP)
+if(CPU_HAS_RDTSCP)
+  add_definitions(-DHAS_RDTSCP=1)
+else()
+  add_definitions(-DHAS_RDTSCP=0)
+endif()
+
 add_compile_options(-g -Wall)
 
 subdirs(apps src)

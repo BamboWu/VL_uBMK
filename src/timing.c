@@ -7,7 +7,7 @@
  */
 __inline__ uint64_t rdtsc() {
 #ifdef __x86_64__
-  uint64_t val(0);
+  uint64_t val = 0;
   __asm__ volatile(
 #if HAS_RDTSCP
           "rdtscp                            \n\r"
@@ -29,7 +29,6 @@ __inline__ uint64_t rdtsc() {
             "rax","eax","rcx","ecx","rdx"
             );
   return val;
-}
 #elif __ARM_ARCH == 8
   uint64_t cntvct;
   __asm__ __volatile__ ("mrs %0, CNTVCT_EL0" : "=r"(cntvct));

@@ -5,35 +5,14 @@
 #include <malloc.h>
 #include <limits.h>
 #include <assert.h>
+#include "utils.hpp"
 
-union Message { // Cacheline-size message
-  struct {
-    int *base;
-    uint64_t len;
-    uint64_t beg;
-    uint64_t end;
-  } arr;
-  uint8_t pad[64]; // make sure it is cacheline-size message
-  Message(int *base, uint64_t len, uint64_t beg, uint64_t end) {
-    arr.base = base;
-    arr.len = len;
-    arr.beg = beg;
-    arr.end = end;
-  }
-  Message(Message &rhs) {
-    arr.base = rhs.arr.base;
-    arr.len = rhs.arr.len;
-    arr.beg = rhs.arr.beg;
-    arr.end = rhs.arr.end;
-  }
-} __attribute__((packed, aligned(64)));
+std::queue< Message<int> > to_pair; // sorted subarray
+std::queue< Message<int> > to_reverse; // 1st sorted subarry to reverse
+std::queue< Message<int> > to_swap; // bitonic subarries
+std::queue< Message<int> > to_connect; // ordered sorted subarries to connect
 
-std::queue<Message> to_pair; // sorted subarray
-std::queue<Message> to_reverse; // 2nd sorted subarry to reverse
-std::queue<Message> to_swap; // bitonic subarries
-std::queue<Message> to_connect; // ordered sorted subarries to be connected
-
-uint64_t roundup64(const uint64_t val) {
+inline uint64_t roundup64(const uint64_t val) {
   uint64_t val64 = val - 1;
   val64 |= (val64 >> 1);
   val64 |= (val64 >> 2);
@@ -42,91 +21,6 @@ uint64_t roundup64(const uint64_t val) {
   val64 |= (val64 >> 16);
   val64 |= (val64 >> 32);
   return ++val64;
-}
-
-/* Check if the array is ascending */
-void check(const int *arr, const uint64_t len) {
-  for (uint64_t i = 1; len > i; ++i) {
-    if (arr[i - 1] > arr[i]) {
-      std::cout << "\033[91mERROR: arr[" << (i - 1) << "] = " << arr[i - 1] <<
-        " > arr[" << i << "] = " << arr[i] << "\033[0m\n";
-      break;
-    }
-  }
-}
-
-/* Dump an array */
-void dump(const int *arr, const uint64_t len) {
-  std::cout << arr[0];
-  for (uint64_t i = 1; len > i; ++i) {
-    std::cout << ", " << arr[i];
-  }
-}
-
-#ifdef DBG
-void print(const int *arr, const uint64_t len, const uint64_t beg,
-           const uint64_t end, const char *prefix, const char *suffix) {
-  if (0 < beg) {
-    dump(arr, beg);
-    std::cout << ", ";
-  }
-  std::cout << prefix;
-  dump(&arr[beg], end - beg);
-  std::cout << suffix;
-  if (len > end) {
-    std::cout << ", ";
-    dump(&arr[end], len - end);
-  }
-  std::cout << std::endl;
-}
-#endif
-
-/* Swap values in the first half of a bitonic with corresponding values
- * in the later half if the value from the first half is bigger */
-void swap(int *arr, const uint64_t len) {
-  const uint64_t half = len >> 1;
-  for (uint64_t i = 0; half > i; ++i) {
-    const uint64_t pair = i + half;
-    if (arr[i] > arr[pair]) {
-      const int tmp = arr[i];
-      arr[i] = arr[pair];
-      arr[pair] = tmp;
-    }
-  }
-}
-
-/* Reverse an array */
-void reverse(int *arr, const uint64_t len) {
-  const uint64_t half = len >> 1;
-  for (uint64_t i = 0; half > i; ++i) {
-    const uint64_t pair = len - i - 1;
-    const int tmp = arr[i];
-    arr[i] = arr[pair];
-    arr[pair] = tmp;
-  }
-}
-
-/* Fill an array with a certain number */
-void fill(int *arr, const uint64_t len, const int val) {
-#ifdef DBG
-  std::cout << "fill(0x" << std::hex << (uint64_t)arr <<
-    std::dec << ", " << len << ", " << val << ")\n";
-#endif
-  for (uint64_t i = 0; len > i; ++i) {
-    arr[i] = val;
-  }
-}
-
-/* Generate an unsorted array filled with random numbers */
-void gen(int *arr, const uint64_t len) {
-#ifdef DBG
-  std::cout << "gen(0x" << std::hex << (uint64_t)arr <<
-    std::dec << ", " << len << ")\n";
-#endif
-  srand(2699);
-  for (uint64_t i = 0; len > i; ++i) {
-    arr[i] = rand();
-  }
 }
 
 /* Sort an array */
@@ -142,7 +36,7 @@ void sort(int *arr, const uint64_t len) {
   while (true) {
     /* what a group of threads do to swap */
     if (!to_swap.empty()) {
-      Message msg(to_swap.front());
+      Message<int> msg(to_swap.front());
       to_swap.pop();
       int *arr_tmp = &msg.arr.base[msg.arr.beg];
       uint64_t len_tmp = msg.arr.end - msg.arr.beg;
@@ -174,7 +68,7 @@ void sort(int *arr, const uint64_t len) {
 
     /* what a thread do to connect */
     if (!to_connect.empty()) {
-      Message msg(to_connect.front());
+      Message<int> msg(to_connect.front());
       to_connect.pop();
       const uint64_t beg_tmp = msg.arr.beg;
       ccount[beg_tmp]++;
@@ -205,7 +99,7 @@ void sort(int *arr, const uint64_t len) {
 
     /* what a thread do to pair */
     if (!to_pair.empty()) {
-      Message msg(to_pair.front());
+      Message<int> msg(to_pair.front());
       to_pair.pop();
       const uint64_t beg_tmp = msg.arr.beg;
       pcount[beg_tmp]++;
@@ -234,7 +128,7 @@ void sort(int *arr, const uint64_t len) {
 
     /* what a group of threads do to reverse */
     if (!to_reverse.empty()) {
-      Message msg(to_reverse.front());
+      Message<int> msg(to_reverse.front());
       to_reverse.pop();
       int *arr_tmp = &msg.arr.base[msg.arr.beg];
       const uint64_t len_tmp = msg.arr.end - msg.arr.beg;

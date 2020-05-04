@@ -32,7 +32,7 @@
 #include <numa.h>
 #endif
 #include <sys/types.h>
-#include "affinity.h"
+#include "threading.h"
 #include "timing.h"
 #include "check.h"
 

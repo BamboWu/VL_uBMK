@@ -11,7 +11,7 @@
 #include "gem5/m5ops.h"
 #endif
 
-#include "affinity.h"
+#include "threading.h"
 #include "timing.h"
 
 #ifndef MAX_LEN
@@ -22,8 +22,8 @@
 #define MAX_ROUND   (1 << 20)
 #endif
 
-#define PRODUCER 0
-#define CONSUMER 1
+#define PRODUCER 1
+#define CONSUMER 2
 
 uint8_t *arr;
 
@@ -31,6 +31,8 @@ uint8_t __attribute__((aligned(4096))) cls[4096]; // cachelines as circular buf
 uint8_t __attribute__((aligned(64))) unrelated[64]; // to compare performance
 
 uint8_t max[MAX_ROUND];
+
+int prod_context_switches, cons_context_switches;
 
 union {
   int round; // to enable pipelining, only producer updates this
@@ -44,6 +46,8 @@ union {
 
 void *producer(void *args) {
   setAffinity(PRODUCER);
+  pid_t pid = getPID();
+  const int nswitches_before = getContextSwitches(pid);
   int round;
   for (round = 0; MAX_ROUND > round; ++round) {
     /** spin until consumer is ready **/
@@ -76,11 +80,15 @@ void *producer(void *args) {
 #endif // !NOSCE
     prod.round = round + 1;
   }
+  const int nswitches_after = getContextSwitches(pid);
+  prod_context_switches = nswitches_after - nswitches_before;
   return NULL;
 }
 
 void *consumer(void *args) {
   setAffinity(CONSUMER);
+  pid_t pid = getPID();
+  const int nswitches_before = getContextSwitches(pid);
   int round;
   for(round = 0; MAX_ROUND > round; ++round) {
     cons.round = round;
@@ -95,12 +103,14 @@ void *consumer(void *args) {
     }
     max[round] = tmp_max;
   }
+  const int nswitches_after = getContextSwitches(pid);
+  cons_context_switches = nswitches_after - nswitches_before;
   return NULL;
 }
 
 int main(int argc, char *argv[]) {
 
-#if SETSCHED
+#ifndef NOSCHEDRR
   int priority = sched_get_priority_max(SCHED_RR);
   struct sched_param sp = { .sched_priority = priority };
   if (0 != sched_setscheduler(0x0 /* this */,
@@ -109,6 +119,7 @@ int main(int argc, char *argv[]) {
     perror("failed to set schedule");
   }
 #endif
+  setAffinity(0);
 
   arr = (uint8_t*) malloc(MAX_ROUND * MAX_LEN * sizeof(uint8_t));
 
@@ -136,6 +147,8 @@ int main(int argc, char *argv[]) {
 #endif
   const uint64_t end = rdtsc();
   printf("average ticks: %f\n", (end - beg) / (double) MAX_ROUND);
+  printf("producer context switches: %d\n", prod_context_switches);
+  printf("consumer context switches: %d\n", cons_context_switches);
   for (round = 0; MAX_ROUND > round; ++round) {
     assert((round & 0x00FF) == max[round]);
   }

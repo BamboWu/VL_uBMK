@@ -7,7 +7,7 @@
 #include <assert.h>
 #include <malloc.h>
 
-#include "affinity.h"
+#include "threading.h"
 #include "timing.h"
 
 #define TARGET 256

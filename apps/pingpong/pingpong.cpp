@@ -19,7 +19,7 @@
 #include <chrono>
 #endif
 
-#include "affinity.h"
+#include "threading.h"
 #include "timing.h"
 
 #ifdef VL

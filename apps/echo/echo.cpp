@@ -4,7 +4,7 @@
 #include <stdint.h>
 #include <inttypes.h>
 #include <malloc.h>
-#include "affinity.h"
+#include "threading.h"
 #include "timing.h"
 #include "zmq.h"
 

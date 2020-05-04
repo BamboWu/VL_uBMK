@@ -13,7 +13,7 @@
 #include <thread>
 #endif
 
-#include "affinity.h"
+#include "threading.h"
 #include "utils.hpp"
 
 #define MAX_ARRLEN 65536

@@ -23,7 +23,7 @@
 #include "timing.h"
 
 #ifdef VL
-#include "vl.h"
+#include "vl/vl.h"
 #endif
 
 #ifdef GEM5

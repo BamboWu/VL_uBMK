@@ -1,0 +1,56 @@
+project(VL_uBMK)
+
+cmake_minimum_required(VERSION 3.1)
+
+add_microbenchmark(latl1x1 latency.c)
+target_compile_definitions(latl1x1 PRIVATE -DARR_SIZE=64)
+add_microbenchmark(latl1x4 latency.c)
+target_compile_definitions(latl1x4 PRIVATE -DARR_SIZE=256)
+add_microbenchmark(latl1x16 latency.c)
+target_compile_definitions(latl1x16 PRIVATE -DARR_SIZE=1024)
+add_microbenchmark(latl1x64 latency.c)
+target_compile_definitions(latl1x64 PRIVATE -DARR_SIZE=4096)
+add_microbenchmark(latl1x256 latency.c)
+target_compile_definitions(latl1x256 PRIVATE -DARR_SIZE=16384)
+
+add_microbenchmark(latl2x1 latency.c)
+target_compile_definitions(latl2x1 PRIVATE -DARR_SIZE=64 -DLATL2)
+add_microbenchmark(latl2x4 latency.c)
+target_compile_definitions(latl2x4 PRIVATE -DARR_SIZE=256 -DLATL2)
+add_microbenchmark(latl2x16 latency.c)
+target_compile_definitions(latl2x16 PRIVATE -DARR_SIZE=1024 -DLATL2)
+add_microbenchmark(latl2x64 latency.c)
+target_compile_definitions(latl2x64 PRIVATE -DARR_SIZE=4096 -DLATL2)
+add_microbenchmark(latl2x256 latency.c)
+target_compile_definitions(latl2x256 PRIVATE -DARR_SIZE=16384 -DLATL2)
+
+add_microbenchmark(latmemx1 latency.c)
+target_compile_definitions(latmemx1 PRIVATE -DARR_SIZE=64 -DLATMEM)
+add_microbenchmark(latmemx4 latency.c)
+target_compile_definitions(latmemx4 PRIVATE -DARR_SIZE=256 -DLATMEM)
+add_microbenchmark(latmemx16 latency.c)
+target_compile_definitions(latmemx16 PRIVATE -DARR_SIZE=1024 -DLATMEM)
+add_microbenchmark(latmemx64 latency.c)
+target_compile_definitions(latmemx64 PRIVATE -DARR_SIZE=4096 -DLATMEM)
+add_microbenchmark(latmemx256 latency.c)
+target_compile_definitions(latmemx256 PRIVATE -DARR_SIZE=16384 -DLATMEM)
+
+add_microbenchmark(latcivacx1 latency.c)
+target_compile_definitions(latcivacx1 PRIVATE -DARR_SIZE=64 -DCIVAC)
+add_microbenchmark(latcivacx4 latency.c)
+target_compile_definitions(latcivacx4 PRIVATE -DARR_SIZE=256 -DCIVAC)
+add_microbenchmark(latcivacx16 latency.c)
+target_compile_definitions(latcivacx16 PRIVATE -DARR_SIZE=1024 -DCIVAC)
+add_microbenchmark(latcivacx64 latency.c)
+target_compile_definitions(latcivacx64 PRIVATE -DARR_SIZE=4096 -DCIVAC)
+add_microbenchmark(latcivacx256 latency.c)
+target_compile_definitions(latcivacx256 PRIVATE -DARR_SIZE=16384 -DCIVAC)
+
+if(NOT TARGET latency)
+    add_custom_target(latency)
+    add_dependencies(latency
+        latl1x1 latl1x4 latl1x16 latl1x64 latl1x256
+        latl2x1 latl2x4 latl2x16 latl2x64 latl2x256
+        latmemx1 latmemx4 latmemx16 latmemx64 latmemx256
+        latcivacx1 latcivacx4 latcivacx16 latcivacx64 latcivacx256)
+endif()

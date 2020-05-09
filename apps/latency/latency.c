@@ -16,6 +16,7 @@
 #define L2_SIZE 1048576
 #endif
 
+#if __ARM_ARCH == 8
 uint64_t CCSIDR2Size(uint32_t ccsidr) {
   const uint64_t line_size = (0x02 == (ccsidr & 0x07)) ? 64 : 0;
   const uint64_t num_ways = 1 << ((ccsidr >> 3) & 0x03FF);
@@ -48,6 +49,7 @@ uint64_t getL2Size() {
       );
   return CCSIDR2Size(l2);
 }
+#endif // __ARM_ARCH == 8
 
 int main() {
   const uint64_t arr_len = ARR_SIZE / sizeof(uint64_t);
@@ -100,65 +102,121 @@ int main() {
   beg_end[5] = (uint64_t)&arr[arr_len];
 #endif
 
+#if __ARM_ARCH == 8
   __asm__ volatile (
-      "       ldr  x8,  [%[beg], 0]   \n\r"
-      "       ldr  x9,  [%[beg], 8]   \n\r"
-      "       mov  x11, 0             \n\r"
-      "BEG0:  cmp  x8,  x9            \n\r"
-      "       b.EQ END0               \n\r"
-      "       ldr  x10, [x8]          \n\r"
-      "       add  x11, x11, x10      \n\r"
-      "       add  x8,  x8,  #64      \n\r"
-      "       cmp  x8,  x9            \n\r"
-      "       b    BEG0               \n\r"
-      "END0:  str  x11, [%[sum], 0]   \n\r"
-      "       dsb  SY                 \n\r"
-      "       ldr  x8,  [%[beg], 16]  \n\r"
-      "       ldr  x9,  [%[beg], 24]  \n\r"
-      "       mov  x11, 0             \n\r"
-      "BEG1:  cmp  x8,  x9            \n\r"
-      "       b.EQ END1               \n\r"
-      "       ldr  x10, [x8]          \n\r"
-      "       add  x11, x11, x10      \n\r"
-      "       add  x8,  x8,  #64      \n\r"
-      "       cmp  x8,  x9            \n\r"
-      "       b    BEG1               \n\r"
-      "END1:  str  x11, [%[sum], 8]   \n\r"
-      "       dsb  SY                 \n\r"
-      "       ldr  x8,  [%[beg], 32]  \n\r"
-      "       ldr  x9,  [%[beg], 40]  \n\r"
-      "       mov  x11, 0             \n\r"
-      "BEG2:  cmp  x8,  x9            \n\r"
-      "       b.EQ END2               \n\r"
-      "       ldr  x10, [x8]          \n\r"
-      "       str  x10, [x8]          \n\r"
-      "       add  x8,  x8,  #64      \n\r"
-      "       cmp  x8,  x9            \n\r"
-      "       b    BEG2               \n\r"
-      "END2:  str  x10, [%[sum], 16]  \n\r"
-      "       dsb  SY                 \n\r"
+      "       ldr  x8,  [%[beg], 0]    \n\r"
+      "       ldr  x9,  [%[beg], 8]    \n\r"
+      "       mov  x11, 0              \n\r"
+      "BEG0:  cmp  x8,  x9             \n\r"
+      "       b.EQ END0                \n\r"
+      "       ldr  x10, [x8]           \n\r"
+      "       add  x11, x11, x10       \n\r"
+      "       add  x8,  x8,  #64       \n\r"
+      "       b    BEG0                \n\r"
+      "END0:  str  x11, [%[sum], 0]    \n\r"
+      "       dsb  SY                  \n\r"
+      "       ldr  x8,  [%[beg], 16]   \n\r"
+      "       ldr  x9,  [%[beg], 24]   \n\r"
+      "       mov  x11, 0              \n\r"
+      "BEG1:  cmp  x8,  x9             \n\r"
+      "       b.EQ END1                \n\r"
+      "       ldr  x10, [x8]           \n\r"
+      "       add  x11, x11, x10       \n\r"
+      "       add  x8,  x8,  #64       \n\r"
+      "       b    BEG1                \n\r"
+      "END1:  str  x11, [%[sum], 8]    \n\r"
+      "       dsb  SY                  \n\r"
+      "       ldr  x8,  [%[beg], 32]   \n\r"
+      "       ldr  x9,  [%[beg], 40]   \n\r"
+      "       mov  x11, 0              \n\r"
+      "BEG2:  cmp  x8,  x9             \n\r"
+      "       b.EQ END2                \n\r"
+      "       ldr  x10, [x8]           \n\r"
+      "       str  x10, [x8]           \n\r"
+      "       add  x8,  x8,  #64       \n\r"
+      "       b    BEG2                \n\r"
+      "END2:  str  x10, [%[sum], 16]   \n\r"
+      "       dsb  SY                  \n\r"
 #ifdef CIVAC
-      "       ldr  x8,  [%[beg], 32]  \n\r"
-      "       ldr  x9,  [%[beg], 40]  \n\r"
-      "BEGDC: cmp  x8,  x9            \n\r"
-      "       b.EQ ENDDC              \n\r"
-      "       dc   civac, x8          \n\r"
-      "       add  x8,  x8,  #64      \n\r"
-      "       cmp  x8,  x9            \n\r"
-      "       b    BEGDC              \n\r"
-      "ENDDC: dsb  SY                 \n\r"
+      "       ldr  x8,  [%[beg], 32]   \n\r"
+      "       ldr  x9,  [%[beg], 40]   \n\r"
+      "BEGDC: cmp  x8,  x9             \n\r"
+      "       b.EQ ENDDC               \n\r"
+      "       dc   civac, x8           \n\r"
+      "       add  x8,  x8,  #64       \n\r"
+      "       b    BEGDC               \n\r"
+      "ENDDC: dsb  SY                  \n\r"
 #endif
-      "       ldr  x8,  [%[sum], 0]   \n\r"
-      "       ldr  x9,  [%[sum], 8]   \n\r"
-      "       ldr  x10, [%[sum], 16]  \n\r"
-      "       sub  x11, x9,  x8       \n\r"
-      "       str  x11, [%[sum], 24]  \n\r"
-      "       sub  x11, x10, x8       \n\r"
-      "       str  x11, [%[sum], 32]  \n\r"
+      "       ldr  x8,  [%[sum], 0]    \n\r"
+      "       ldr  x9,  [%[sum], 8]    \n\r"
+      "       ldr  x10, [%[sum], 16]   \n\r"
+      "       sub  x11, x9,  x8        \n\r"
+      "       str  x11, [%[sum], 24]   \n\r"
+      "       sub  x11, x10, x8        \n\r"
+      "       str  x11, [%[sum], 32]   \n\r"
       :
       : [beg]"r" (beg_end), [sum]"r" (sums)
       : "x8", "x9", "x10", "x11", "cc", "memory"
       );
+#elif defined(__x86_64__)
+  __asm__ volatile (
+      "       movq 0(%[beg]),    %%rsi \n\r"
+      "       movq 8(%[beg]),    %%rcx \n\r"
+      "       movq $0,           %%rax \n\r"
+      "BEG0:  cmp  %%rsi,        %%rcx \n\r"
+      "       je   END0                \n\r"
+      "       mov  (%%rsi),      %%rdx \n\r"
+      "       add  %%rdx,        %%rax \n\r"
+      "       add  $64,          %%rsi \n\r"
+      "       jmp  BEG0                \n\r"
+      "END0:  mov  %%rax,    0(%[sum]) \n\r"
+      "       lfence                   \n\r"
+      "       movq 16(%[beg]),   %%rsi \n\r"
+      "       movq 24(%[beg]),   %%rcx \n\r"
+      "       movq $0,           %%rax \n\r"
+      "BEG1:  cmp  %%rsi,        %%rcx \n\r"
+      "       je   END1                \n\r"
+      "       mov  (%%rsi),      %%rdx \n\r"
+      "       add  %%rdx,        %%rax \n\r"
+      "       add  $64,          %%rsi \n\r"
+      "       jmp  BEG1                \n\r"
+      "END1:  mov  %%rax,    8(%[sum]) \n\r"
+      "       lfence                   \n\r"
+      "       movq 32(%[beg]),   %%rsi \n\r"
+      "       movq 40(%[beg]),   %%rcx \n\r"
+      "       movq $0,           %%rax \n\r"
+      "BEG2:  cmp  %%rsi,        %%rcx \n\r"
+      "       je   END2                \n\r"
+      "       mov  (%%rsi),      %%rdx \n\r"
+      "       add  %%rdx,        %%rax \n\r"
+      "       add  $64,          %%rsi \n\r"
+      "       jmp  BEG2                \n\r"
+      "END2:  mov  %%rax,   16(%[sum]) \n\r"
+      "       lfence                   \n\r"
+#ifdef CLFLUSH
+      "       movq 32(%[beg]),   %%rsi \n\r"
+      "       movq 40(%[beg]),   %%rcx \n\r"
+      "       movq $0,           %%rax \n\r"
+      "BEGDC: cmp  %%rsi,        %%rcx \n\r"
+      "       je   ENDDC               \n\r"
+      "       clflush (%%rsi)          \n\r"
+      "       add  $64,          %%rsi \n\r"
+      "       jmp  BEGDC               \n\r"
+      "ENDDC: lfence                   \n\r"
+#endif
+      "       movq 0(%[sum]),    %%rdx \n\r"
+      "       movq 8(%[sum]),    %%rax \n\r"
+      "       sub  %%rdx,        %%rax \n\r"
+      "       movq %%rax,   24(%[sum]) \n\r"
+      "       movq 8(%[sum]),    %%rdx \n\r"
+      "       movq 16(%[sum]),   %%rax \n\r"
+      "       sub  %%rdx,        %%rax \n\r"
+      "       movq %%rax,   32(%[sum]) \n\r"
+      :
+      : [beg]"r" (beg_end), [sum]"r" (sums)
+      : "rax", "rdx", "rcx", "rsi", "cc", "memory"
+      );
+#endif
 
   // timing arr accesses
   uint64_t tsc, frq;
@@ -166,22 +224,57 @@ int main() {
 #ifndef NOGEM5
   m5_reset_stats(0, 0);
 #endif
+#if __ARM_ARCH == 8
   __asm__ volatile (
-      "       mov  x8,  %[beg]       \n\r"
-      "       mov  x9,  x8           \n\r"
-      "       dsb  SY                \n\r"
-      "       mrs  x10, CNTVCT_EL0   \n\r"
-      "LOOP:  ldr  x8,  [x8]         \n\r"
-      "       cmp  x8,  x9           \n\r"
-      "       b.NE LOOP              \n\r"
-      "       dsb  SY                \n\r"
-      "       mrs  x8, CNTVCT_EL0    \n\r"
-      "       sub  %[tsc], x8,  x10  \n\r"
+      "       mov  x8,  %[beg]        \n\r"
+      "       mov  x9,  x8            \n\r"
+      "       dsb  SY                 \n\r"
+      "       mrs  x10, CNTVCT_EL0    \n\r"
+      "LOOP:  ldr  x8,  [x8]          \n\r"
+      "       cmp  x8,  x9            \n\r"
+      "       b.NE LOOP               \n\r"
+      "       dsb  SY                 \n\r"
+      "       mrs  x8, CNTVCT_EL0     \n\r"
+      "       sub  %[tsc], x8,  x10   \n\r"
       "       mrs  %[frq], CNTFRQ_EL0 \n\r"
       : [tsc]"=r" (tsc), [frq]"=r" (frq)
       : [beg]"r" (arr)
       : "x8", "x9", "cc"
       );
+#elif defined(__x86_64__)
+  __asm__ volatile (
+      "       movq %[beg],   %%rcx    \n\r"
+      "       movq %%rcx,    %%rsi    \n\r"
+#if HAS_RDTSCP
+      "       rdtscp                  \n\r"
+#else
+      "       lfence                  \n\r"
+      "       rdtsc                   \n\r"
+#endif
+      "       shl  $32,      %%rdx    \n\r"
+      "       orq  %%rax,    %%rdx    \n\r"
+      "LOOP:  movq (%%rsi),  %%rsi    \n\r"
+      "       cmp  %%rsi,    %%rcx    \n\r"
+      "       jne  LOOP               \n\r"
+      "       movq %%rdx,    %[tsc]   \n\r"
+#if HAS_RDTSCP
+      "       rdtscp                  \n\r"
+#else
+      "       lfence                  \n\r"
+      "       rdtsc                   \n\r"
+#endif
+      "       shl  $32,      %%rdx    \n\r"
+      "       orq  %%rax,    %%rdx    \n\r"
+      "       sub  %[tsc],   %%rdx    \n\r"
+      "       movq %%rdx,    %[tsc]   \n\r"
+      : [tsc]"=r" (tsc)
+      : [beg]"r" (arr)
+      : "rcx", "rsi", "rdx", "rax", "cc"
+      );
+  const uint64_t frq_beg = rdtsc();
+  system("sleep 1");
+  frq = (rdtsc() - frq_beg) / 1000000 * 1000000; // round up MHz
+#endif
 #ifndef NOGEM5
   m5_dump_stats(0, 0);
 #endif

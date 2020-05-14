@@ -2,10 +2,6 @@ project(VL_uBMK)
 
 cmake_minimum_required(VERSION 3.1)
 
-find_package(Zmq QUIET)
-
-# check boost libraries
-find_package(Boost QUIET COMPONENTS atomic thread chrono)
 include_directories(${Boost_INCLUDE_DIRS})
 link_directories(${Boost_LIBRARY_DIRS})
 

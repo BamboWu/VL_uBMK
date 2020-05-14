@@ -2,8 +2,6 @@ project(VL_uBMK)
 
 cmake_minimum_required(VERSION 3.1)
 
-find_package(Numa QUIET)
-
 add_microbenchmark(atomicFSh shopping.c)
 target_compile_definitions(atomicFSh PRIVATE "ATOMIC")
 add_microbenchmark(atomicPad shopping.c)

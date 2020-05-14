@@ -2,8 +2,6 @@ project(VL_uBMK)
 
 cmake_minimum_required(VERSION 3.1)
 
-find_package(Zmq QUIET)
-
 if(ZMQ_STATIC_FOUND)
     add_microbenchmark(echo echo.cpp)
     target_include_directories(echo PRIVATE ${ZMQ_INCLUDE_DIR})

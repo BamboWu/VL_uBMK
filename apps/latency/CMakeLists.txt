@@ -1,5 +1,12 @@
 project(VL_uBMK)
 
+if(PAPI_STATIC_FOUND OR PAPI_DYNAMIC_FOUND)
+    include_directories(${PAPI_INCLUDE_DIR})
+    link_directories(${PAPI_LIBRARY})
+else()
+    add_definitions(-DNOPAPI)
+endif()
+
 cmake_minimum_required(VERSION 3.1)
 
 add_microbenchmark(latl1x1 latency.c)

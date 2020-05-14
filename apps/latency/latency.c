@@ -3,6 +3,11 @@
 #include <stdint.h>
 
 #include "timing.h"
+#include "check.h"
+//#include "profiling.h" // using function calls has too much overhead for this
+#ifndef NOPAPI
+#include "papi.h"
+#endif
 
 #ifndef ARR_SIZE
 #define ARR_SIZE 16384
@@ -58,6 +63,28 @@ int main() {
   uint64_t pool[num_cls];
   uint64_t idx, cnt;
 
+#ifndef NOPAPI
+  static int events = PAPI_NULL;
+  static int retval;
+  static long long cntvals[6];
+  retval = PAPI_library_init(PAPI_VER_CURRENT);
+  if (retval != PAPI_VER_CURRENT) {
+    printf("Failed with %d at PAPI_library_init()", retval);
+    exit(1);
+  }
+  retval = PAPI_create_eventset(&events);
+  if (retval < PAPI_OK) { errorReturn(retval); }
+  retval = PAPI_add_event(events, PAPI_L2_DCR);
+  if (retval < PAPI_OK) { errorReturn(retval); }
+  retval = PAPI_add_event(events, PAPI_L2_DCW);
+  if (retval < PAPI_OK) { errorReturn(retval); }
+  retval = PAPI_add_event(events, PAPI_L2_DCM);
+  if (retval < PAPI_OK) { errorReturn(retval); }
+
+  retval = PAPI_start(events); // rehearse those PAPI function calls once early
+  if (retval < PAPI_OK) { errorReturn(retval); }
+#endif
+
   // populate arr in pointer chasing manner
   for (cnt = 0; num_cls > cnt; ++cnt) {
     pool[cnt] = cnt;
@@ -72,6 +99,11 @@ int main() {
     idx = new_idx;
     pool[pool_idx] = pool[cnt - 1];
   }
+
+#ifndef NOPAPI
+  retval = PAPI_stop(events, cntvals); // rehearsal
+  if (retval < PAPI_OK) { errorReturn(retval); }
+#endif
 
   // bring the arr to certain level
   const uint64_t l2_len = L2_SIZE / sizeof(uint64_t);
@@ -221,6 +253,10 @@ int main() {
   // timing arr accesses
   uint64_t tsc, frq;
   //const uint64_t beg = rdtsc();
+#ifndef NOPAPI
+  retval = PAPI_start(events);
+  if (retval < PAPI_OK) { errorReturn(retval); }
+#endif
 #ifndef NOGEM5
   m5_reset_stats(0, 0);
 #endif
@@ -277,6 +313,12 @@ int main() {
 #endif
 #ifndef NOGEM5
   m5_dump_stats(0, 0);
+#endif
+#ifndef NOPAPI
+  retval = PAPI_stop(events, cntvals);
+  if (retval < PAPI_OK) { errorReturn(retval); }
+  printf("L2D: reads = %lld, writes = %lld, misses = %lld\n",
+         cntvals[0], cntvals[1], cntvals[2]);
 #endif
   //const uint64_t end = rdtsc();
   //printf("latency (rdtsc() ticks) = %lu\n", end - beg);

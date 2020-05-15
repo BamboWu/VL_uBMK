@@ -67,20 +67,55 @@ int main() {
   static int events = PAPI_NULL;
   static int retval;
   static long long cntvals[6];
+  static int cntidxs[6] = {-1, -1, -1, -1, -1, -1};
+  static int cntidx = 0;
   retval = PAPI_library_init(PAPI_VER_CURRENT);
   if (retval != PAPI_VER_CURRENT) {
     printf("Failed with %d at PAPI_library_init()", retval);
     exit(1);
   }
+  retval = PAPI_set_domain(PAPI_DOM_USER);
+  if (PAPI_OK != retval) {
+    printf("WARNING: Failed to set PAPI domain to user\n");
+  }
   retval = PAPI_create_eventset(&events);
   if (retval < PAPI_OK) { errorReturn(retval); }
-  retval = PAPI_add_event(events, PAPI_L2_DCR);
-  if (retval < PAPI_OK) { errorReturn(retval); }
-  retval = PAPI_add_event(events, PAPI_L2_DCW);
-  if (retval < PAPI_OK) { errorReturn(retval); }
-  retval = PAPI_add_event(events, PAPI_L2_DCM);
-  if (retval < PAPI_OK) { errorReturn(retval); }
-
+  retval = PAPI_query_named_event("PAPI_L1_DCR");
+  if (PAPI_OK == retval) {
+    retval = PAPI_add_event(events, PAPI_L1_DCR);
+    if (retval < PAPI_OK) { errorReturn(retval); }
+    cntidxs[0] = cntidx++;
+  }
+  retval = PAPI_query_named_event("PAPI_L1_DCM");
+  if (PAPI_OK == retval) {
+    retval = PAPI_add_event(events, PAPI_L1_DCM);
+    if (retval < PAPI_OK) { errorReturn(retval); }
+    cntidxs[1] = cntidx++;
+  }
+  retval = PAPI_query_named_event("PAPI_L2_DCR");
+  if (PAPI_OK == retval) {
+    retval = PAPI_add_event(events, PAPI_L2_DCR);
+    if (retval < PAPI_OK) { errorReturn(retval); }
+    cntidxs[2] = cntidx++;
+  }
+  retval = PAPI_query_named_event("PAPI_L2_DCM");
+  if (PAPI_OK == retval) {
+    retval = PAPI_add_event(events, PAPI_L2_DCM);
+    if (retval < PAPI_OK) { errorReturn(retval); }
+    cntidxs[3] = cntidx++;
+  }
+  retval = PAPI_query_named_event("BUS_READ_ACCESS");
+  if (PAPI_OK == retval) {
+    retval = PAPI_add_named_event(events, "BUS_READ_ACCESS");
+    if (retval < PAPI_OK) { errorReturn(retval); }
+    cntidxs[4] = cntidx++;
+  }
+  retval = PAPI_query_named_event("L1D_READ_REFILL");
+  if (PAPI_OK == retval) {
+    retval = PAPI_add_named_event(events, "L1D_READ_REFILL");
+    if (retval < PAPI_OK) { errorReturn(retval); }
+    cntidxs[5] = cntidx++;
+  }
   retval = PAPI_start(events); // rehearse those PAPI function calls once early
   if (retval < PAPI_OK) { errorReturn(retval); }
 #endif
@@ -317,8 +352,24 @@ int main() {
 #ifndef NOPAPI
   retval = PAPI_stop(events, cntvals);
   if (retval < PAPI_OK) { errorReturn(retval); }
-  printf("L2D: reads = %lld, writes = %lld, misses = %lld\n",
-         cntvals[0], cntvals[1], cntvals[2]);
+  if (0 <= cntidxs[0]) {
+      printf("PAPI_L1_DCR  = %8lld\n", cntvals[cntidxs[0]]);
+  }
+  if (0 <= cntidxs[1]) {
+      printf("PAPI_L1_DCM  = %8lld\n", cntvals[cntidxs[1]]);
+  }
+  if (0 <= cntidxs[5]) {
+      printf("L1D_LDM      = %8lld\n", cntvals[cntidxs[5]]);
+  }
+  if (0 <= cntidxs[2]) {
+      printf("PAPI_L2_DCR  = %8lld\n", cntvals[cntidxs[2]]);
+  }
+  if (0 <= cntidxs[3]) {
+      printf("PAPI_L2_DCM  = %8lld\n", cntvals[cntidxs[3]]);
+  }
+  if (0 <= cntidxs[4]) {
+      printf("BUS_READS    = %8lld\n", cntvals[cntidxs[4]]);
+  }
 #endif
   //const uint64_t end = rdtsc();
   //printf("latency (rdtsc() ticks) = %lu\n", end - beg);

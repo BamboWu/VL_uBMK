@@ -79,6 +79,44 @@ int main() {
     printf("WARNING: Failed to set PAPI domain to user\n");
   }
   retval = PAPI_create_eventset(&events);
+#if ARM_USER_PMU_V3
+  retval = PAPI_query_named_event("L1D_READ_ACCESS");
+  if (PAPI_OK == retval) {
+    retval = PAPI_add_named_event(events, "L1D_READ_ACCESS");
+    if (retval < PAPI_OK) { errorReturn(retval); }
+    cntidxs[0] = cntidx++;
+  }
+  retval = PAPI_query_named_event("L1D_READ_REFILL");
+  if (PAPI_OK == retval) {
+    retval = PAPI_add_named_event(events, "L1D_READ_REFILL");
+    if (retval < PAPI_OK) { errorReturn(retval); }
+    cntidxs[1] = cntidx++;
+  }
+  retval = PAPI_query_named_event("L2D_READ_ACCESS");
+  if (PAPI_OK == retval) {
+    retval = PAPI_add_named_event(events, "L2D_READ_ACCESS");
+    if (retval < PAPI_OK) { errorReturn(retval); }
+    cntidxs[2] = cntidx++;
+  }
+  retval = PAPI_query_named_event("L2D_READ_REFILL");
+  if (PAPI_OK == retval) {
+    retval = PAPI_add_named_event(events, "L2D_READ_REFILL");
+    if (retval < PAPI_OK) { errorReturn(retval); }
+    cntidxs[3] = cntidx++;
+  }
+  retval = PAPI_query_named_event("BUS_READ_ACCESS");
+  if (PAPI_OK == retval) {
+    retval = PAPI_add_named_event(events, "BUS_READ_ACCESS");
+    if (retval < PAPI_OK) { errorReturn(retval); }
+    cntidxs[4] = cntidx++;
+  }
+  retval = PAPI_query_named_event("BUS_CYCLES");
+  if (PAPI_OK == retval) {
+    retval = PAPI_add_named_event(events, "BUS_CYCLES");
+    if (retval < PAPI_OK) { errorReturn(retval); }
+    cntidxs[5] = cntidx++;
+  }
+#else
   if (retval < PAPI_OK) { errorReturn(retval); }
   retval = PAPI_query_named_event("PAPI_L1_DCR");
   if (PAPI_OK == retval) {
@@ -116,6 +154,7 @@ int main() {
     if (retval < PAPI_OK) { errorReturn(retval); }
     cntidxs[5] = cntidx++;
   }
+#endif
   retval = PAPI_start(events); // rehearse those PAPI function calls once early
   if (retval < PAPI_OK) { errorReturn(retval); }
 #endif
@@ -135,7 +174,7 @@ int main() {
     pool[pool_idx] = pool[cnt - 1];
   }
 
-#ifndef NOPAPI
+#if !(defined(NOPAPI) || ARM_USER_PMU_V3)
   retval = PAPI_stop(events, cntvals); // rehearsal
   if (retval < PAPI_OK) { errorReturn(retval); }
 #endif
@@ -288,7 +327,7 @@ int main() {
   // timing arr accesses
   uint64_t tsc, frq;
   //const uint64_t beg = rdtsc();
-#ifndef NOPAPI
+#if !(defined(NOPAPI) || ARM_USER_PMU_V3)
   retval = PAPI_start(events);
   if (retval < PAPI_OK) { errorReturn(retval); }
 #endif
@@ -300,6 +339,11 @@ int main() {
       "       mov  x8,  %[beg]        \n\r"
       "       mov  x9,  x8            \n\r"
       "       dsb  SY                 \n\r"
+#if ARM_USER_PMU_V3
+      "       mrs  x10, PMCR_EL0      \n\r"
+      "       orr  x10, x10, 0x2      \n\r"
+      "       msr  PMCR_EL0, x10      \n\r" // reset event counters
+#endif
       "       mrs  x10, CNTVCT_EL0    \n\r"
       "LOOP:  ldr  x8,  [x8]          \n\r"
       "       cmp  x8,  x9            \n\r"
@@ -307,10 +351,29 @@ int main() {
       "       dsb  SY                 \n\r"
       "       mrs  x8, CNTVCT_EL0     \n\r"
       "       sub  %[tsc], x8,  x10   \n\r"
+#if ARM_USER_PMU_V3
+      "       mrs  x8,  PMEVCNTR0_EL0 \n\r"
+      "       mrs  x9,  PMEVCNTR1_EL0 \n\r"
+      "       mrs  x10, PMEVCNTR2_EL0 \n\r"
+      "       mrs  x11, PMEVCNTR3_EL0 \n\r"
+      "       mrs  x12, PMEVCNTR4_EL0 \n\r"
+      "       mrs  x13, PMEVCNTR5_EL0 \n\r"
+      "       str  x8,  [%[pmu], 0]   \n\r"
+      "       str  x9,  [%[pmu], 8]   \n\r"
+      "       str  x10, [%[pmu], 16]  \n\r"
+      "       str  x11, [%[pmu], 24]  \n\r"
+      "       str  x12, [%[pmu], 32]  \n\r"
+      "       str  x13, [%[pmu], 40]  \n\r"
+#endif
       "       mrs  %[frq], CNTFRQ_EL0 \n\r"
-      : [tsc]"=r" (tsc), [frq]"=r" (frq)
+      : [tsc]"=&r" (tsc), [frq]"=r" (frq)
+#if ARM_USER_PMU_V3
+      : [beg]"r" (arr), [pmu]"r" (cntvals)
+      : "x8", "x9", "x10", "x11", "x12", "x13", "cc", "memory"
+#else
       : [beg]"r" (arr)
       : "x8", "x9", "cc"
+#endif
       );
 #elif defined(__x86_64__)
   __asm__ volatile (
@@ -350,6 +413,27 @@ int main() {
   m5_dump_stats(0, 0);
 #endif
 #ifndef NOPAPI
+#if ARM_USER_PMU_V3
+  if (0 <= cntidxs[0]) {
+      printf("L1D_READ_ACCESS  = %8lld\n", cntvals[cntidxs[0]]);
+  }
+  if (0 <= cntidxs[1]) {
+      printf("L1D_READ_REFILL  = %8lld\n", cntvals[cntidxs[1]]);
+  }
+  if (0 <= cntidxs[2]) {
+      printf("L2D_READ_ACCESS  = %8lld\n", cntvals[cntidxs[2]]);
+  }
+  if (0 <= cntidxs[3]) {
+      printf("L2D_READ_REFILL  = %8lld\n", cntvals[cntidxs[3]]);
+  }
+  if (0 <= cntidxs[4]) {
+      printf("BUS_READ_ACCESS  = %8lld\n", cntvals[cntidxs[4]]);
+  }
+  if (0 <= cntidxs[5]) {
+      printf("BUS_CYCLES       = %8lld\n", cntvals[cntidxs[5]]);
+  }
+  retval = PAPI_stop(events, cntvals);
+#else
   retval = PAPI_stop(events, cntvals);
   if (retval < PAPI_OK) { errorReturn(retval); }
   if (0 <= cntidxs[0]) {
@@ -370,6 +454,7 @@ int main() {
   if (0 <= cntidxs[4]) {
       printf("BUS_READS    = %8lld\n", cntvals[cntidxs[4]]);
   }
+#endif
 #endif
   //const uint64_t end = rdtsc();
   //printf("latency (rdtsc() ticks) = %lu\n", end - beg);

@@ -38,6 +38,19 @@ else()
   add_definitions(-DHAS_RDTSCP=0)
 endif()
 
+execute_process(COMMAND ../scripts/try_PMU_on_Raspi4.sh
+    RESULT_VARIABLE TRY_PMU_ERROR)
+if(0 EQUAL TRY_PMU_ERROR)
+  MESSAGE(STATUS "INFO: User space PMU avaialble, ARM_USER_PMU_V3 = 1.")
+  add_definitions(-DARM_USER_PMU_V3=1)
+else()
+  MESSAGE(STATUS "WARNING: User space no access to PMU, ARM_USER_PMU_V3 = 0.")
+  if("255" EQUAL TRY_PMU_ERROR)
+    MESSAGE(STATUS "INFO: Try pmuenable kernel module in src/ if have sudo.")
+  endif()
+  add_definitions(-DARM_USER_PMU_V3=0)
+endif()
+
 add_compile_options(-g -Wall)
 
 subdirs(apps src)

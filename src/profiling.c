@@ -149,7 +149,7 @@ void l2dEnd(long long *cntvals) {
 #else
 
 void cycleBeg() { printf("NOPAPI!\n"); }
-long long cycleEnd() { printf("NOPAPI!\n"); }
+long long cycleEnd() { printf("NOPAPI!\n"); return 0; }
 void l1dBeg() { printf("NOPAPI!\n"); }
 void l1dEnd(long long *cntvals) { printf("NOPAPI!\n"); }
 void l2dBeg() { printf("NOPAPI!\n"); }

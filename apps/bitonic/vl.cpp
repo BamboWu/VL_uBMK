@@ -12,10 +12,14 @@
 #include <thread>
 #endif
 
-#include "vl/vl.h"
-
 #include "threading.h"
 #include "utils.hpp"
+
+#include "vl/vl.h"
+
+#ifndef NOGEM5
+#include "gem5/m5ops.h"
+#endif
 
 #ifndef STDTHREAD
 using boost::thread;
@@ -251,6 +255,10 @@ void sort(int *arr, const uint64_t len) {
     worker_threads.push_back(thread(rswap_worker, core_id++));
   }
 
+#ifndef NOGEM5
+  m5_reset_stats(0, 0);
+#endif
+
   // every two elements form a biotonic subarray, ready for swap
   for (uint64_t i = 0; len > i; i += 2) {
     double_vl_push_strong(&endpt, (uint64_t)arr);
@@ -262,6 +270,11 @@ void sort(int *arr, const uint64_t len) {
 
   connector_thread.join();
   lock.done = true; // tell other worker threads we are done
+
+#ifndef NOGEM5
+  m5_dump_reset_stats(0, 0);
+#endif
+
   for (int i = NUM_SWAP_WORKERS + NUM_RSWAP_WORKERS - 1; 0 <= i; --i) {
     worker_threads[i].join();
   }

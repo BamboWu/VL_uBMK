@@ -16,6 +16,10 @@
 #include "threading.h"
 #include "utils.hpp"
 
+#ifndef NOGEM5
+#include "gem5/m5ops.h"
+#endif
+
 #define MAX_ARRLEN 65536
 
 #ifndef STDTHREAD
@@ -210,6 +214,10 @@ void sort(int *arr, const uint64_t len) {
     worker_threads.push_back(thread(rswap_worker, core_id++));
   }
 
+#ifndef NOGEM5
+  m5_reset_stats(0, 0);
+#endif
+
   // every two elements form a biotonic subarray, ready for swap
   Message<int> msg(arr, len, 0, 2);
   const int msg_size = sizeof(msg);
@@ -221,6 +229,11 @@ void sort(int *arr, const uint64_t len) {
 
   connector_thread.join();
   lock.done = true; // tell other worker threads we are done
+
+#ifndef NOGEM5
+  m5_dump_reset_stats(0, 0);
+#endif
+
   for (int i = NUM_SWAP_WORKERS + NUM_RSWAP_WORKERS - 1; 0 <= i; --i) {
     worker_threads[i].join();
   }

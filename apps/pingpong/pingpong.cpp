@@ -26,7 +26,7 @@
 #include "vl/vl.h"
 #endif
 
-#ifdef GEM5
+#ifndef NOGEM5
 #include "gem5/m5ops.h"
 #endif
 
@@ -250,7 +250,7 @@ int main( int argc, char **argv )
     const uint64_t beg_tsc = rdtsc();
     const auto beg( high_resolution_clock::now() );
 
-#ifdef GEM5
+#ifndef NOGEM5
     m5_reset_stats(0, 0);
 #endif
 
@@ -259,7 +259,7 @@ int main( int argc, char **argv )
     playerm.join();
     players.join();
 
-#ifdef GEM5
+#ifndef NOGEM5
     m5_dump_reset_stats(0, 0);
 #endif
 

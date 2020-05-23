@@ -7,6 +7,10 @@
 #include <assert.h>
 #include "utils.hpp"
 
+#ifndef NOGEM5
+#include "gem5/m5ops.h"
+#endif
+
 std::queue< Message<int> > to_pair; // sorted subarray
 std::queue< Message<int> > to_reverse; // 1st sorted subarry to reverse
 std::queue< Message<int> > to_swap; // bitonic subarries
@@ -27,6 +31,10 @@ inline uint64_t roundup64(const uint64_t val) {
 void sort(int *arr, const uint64_t len) {
   uint8_t *ccount = new uint8_t[len](); // count number of entering connect()
   uint8_t *pcount = new uint8_t[len](); // count number of entering pair()
+
+#ifndef NOGEM5
+  m5_reset_stats(0, 0);
+#endif
 
   // every two elements form a biotonic subarray, ready for swap
   for (uint64_t i = 0; len > i; i += 2) {
@@ -152,6 +160,10 @@ void sort(int *arr, const uint64_t len) {
   }
   delete[] ccount;
   delete[] pcount;
+
+#ifndef NOGEM5
+  m5_dump_reset_stats(0, 0);
+#endif
 }
 
 int main(int argc, char *argv[]) {

@@ -15,3 +15,21 @@ if(PAPI_STATIC_FOUND OR PAPI_DYNAMIC_FOUND)
 else()
   add_definitions(-DNOPAPI)
 endif()
+
+if(ZMQ_STATIC_FOUND OR ZMQ_DYNAMIC_FOUND)
+  add_library(phish-zmq STATIC
+    phish/hashlittle.cpp
+    phish/phish-common.cpp
+    phish/phish-zmq.cpp)
+  add_library(phish-bait-zmq STATIC
+    phish/phish-bait-common.cpp
+    phish/phish-bait-zmq.cpp)
+  target_include_directories(phish-zmq PRIVATE ${ZMQ_INCLUDE_DIR})
+  target_include_directories(phish-zmq PRIVATE ../include/phish)
+  target_include_directories(phish-bait-zmq PRIVATE ${ZMQ_INCLUDE_DIR})
+  target_include_directories(phish-bait-zmq PRIVATE ../include/phish)
+  target_link_libraries(phish-zmq ${ZMQ_LIBRARY})
+  target_link_libraries(phish-bait-zmq ${ZMQ_LIBRARY})
+elseif(NOT (ZMQ_STATIC_FOUND OR ZMQ_DYNAMIC_FOUND))
+  MESSAGE(STATUS "WARNING: No zmq library, skip phish library.")
+endif()

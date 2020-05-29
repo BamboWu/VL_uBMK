@@ -76,19 +76,19 @@ int mosi_vl_fd,
 struct vl_q_t {
   vlendpt_t in;
   vlendpt_t out;
-  bool push(ball_t ball) { double_vl_push_strong(&in, ball.val); return true; }
+  bool push(ball_t ball) { twin_vl_push_strong(&in, ball.val); return true; }
   bool pop(ball_t &ball) {
     bool valid;
-    double_vl_pop_non(&out, &ball.val, &valid);
+    twin_vl_pop_non(&out, &ball.val, &valid);
     return valid;
   }
   void open(int fd, int num_cachelines = 1) {
-    open_double_vl_as_producer(fd, &in, num_cachelines);
-    open_double_vl_as_consumer(fd, &out, num_cachelines);
+    open_twin_vl_as_producer(fd, &in, num_cachelines);
+    open_twin_vl_as_consumer(fd, &out, num_cachelines);
   }
   void close() {
-    close_double_vl_as_producer(in);
-    close_double_vl_as_consumer(out);
+    close_twin_vl_as_producer(in);
+    close_twin_vl_as_consumer(out);
   }
   ~vl_q_t() { close(); }
 };

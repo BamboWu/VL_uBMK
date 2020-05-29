@@ -9,6 +9,10 @@
 #include "papi.h"
 #endif
 
+#ifndef NOGEM5
+#include "gem5/m5ops.h"
+#endif
+
 #ifndef ARR_SIZE
 #define ARR_SIZE 16384
 #endif

@@ -95,6 +95,7 @@ void rswap_worker(const int desired_core) {
 }
 
 void connector(const int desired_core, const uint64_t len) {
+  setAffinity(desired_core);
   uint8_t *ccount = new uint8_t[len](); // count number of entering connect()
   uint8_t *pcount = new uint8_t[len](); // count number of entering pair()
   Message<int> msg;

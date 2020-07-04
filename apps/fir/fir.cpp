@@ -77,9 +77,9 @@ struct vl_q_t {
     // taking sizeof(data_t)
     bool push(data_t data) {
         uint64_t *tp = (uint64_t*) &data;
-    	twin_vl_push_strong(&in, *tp);
-    	//twin_vl_flush(&in);
-    	return true;
+        twin_vl_push_strong(&in, *tp);
+        //twin_vl_flush(&in);
+        return true;
     }
     void flush(){
         twin_vl_flush(&in);
@@ -88,7 +88,7 @@ struct vl_q_t {
         uint64_t temp;
         twin_vl_pop_strong(&out, &temp);
         data_t *tp = (data_t*) &temp;
-        data = *tp;	
+        data = *tp;
         return true;
     }
     void open(int fd, int num_cachelines = 1, bool is_producer = true) {
@@ -117,62 +117,62 @@ boost_q_t q_fir2_out  ( CAPACITY / sizeof(data_t) );
 
 class FIR{
 public:
-	FIR(data_t *coefficients, unsigned int number_of_taps);
-	~FIR();
-	data_t filter(data_t input);
+    FIR(data_t *coefficients, unsigned int number_of_taps);
+    ~FIR();
+    data_t filter(data_t input);
 
 private:
-	data_t        *coeffs;
-	data_t        *buffer;
-	unsigned int   taps;
-	unsigned int   offset = 0;
+    data_t        *coeffs;
+    data_t        *buffer;
+    unsigned int   taps;
+    unsigned int   offset = 0;
 };
 
-FIR::FIR(data_t *coefficients, unsigned int number_of_taps): 
-    coeffs(new data_t[number_of_taps]), 
+FIR::FIR(data_t *coefficients, unsigned int number_of_taps):
+    coeffs(new data_t[number_of_taps]),
     buffer(new data_t[number_of_taps]),
     taps(number_of_taps)
 {
-	for(unsigned int i=0;i<number_of_taps;i++) {
+    for(unsigned int i=0;i<number_of_taps;i++) {
         coeffs[i] = coefficients[i];
         buffer[i] = 0;
-	}
+    }
 }
 
 FIR::~FIR()
 {
-	delete[] buffer;
-	delete[] coeffs;
+    delete[] buffer;
+    delete[] coeffs;
 }
 
 data_t FIR::filter(data_t input)
 {
-	data_t *pcoeffs     = coeffs;
-	const data_t *coeffs_end = pcoeffs + taps;
+    data_t *pcoeffs     = coeffs;
+    const data_t *coeffs_end = pcoeffs + taps;
 
-	data_t *buf_val = buffer + offset;
+    data_t *buf_val = buffer + offset;
 
-	*buf_val = input;
-	data_t output = 0;
-	
-	while(buf_val >= buffer){
-		output += (*buf_val) * (*pcoeffs);
-		buf_val--;
-		pcoeffs++;
-	}
+    *buf_val = input;
+    data_t output = 0;
 
-	buf_val = buffer + taps-1;
-	
-	while(pcoeffs < coeffs_end){
-		output += (*buf_val) * (*pcoeffs);
-		buf_val--;
-		pcoeffs++;
-	}
-	
-	offset++;
-	if(offset >= taps) offset = 0;
-	
-	return output;
+    while(buf_val >= buffer){
+        output += (*buf_val) * (*pcoeffs);
+        buf_val--;
+        pcoeffs++;
+    }
+
+    buf_val = buffer + taps-1;
+
+    while(pcoeffs < coeffs_end){
+        output += (*buf_val) * (*pcoeffs);
+        buf_val--;
+        pcoeffs++;
+    }
+
+    offset++;
+    if(offset >= taps) offset = 0;
+
+    return output;
 }
 
 
@@ -194,8 +194,8 @@ input_stream(unsigned int samples, atomic_t &ready)
     /** we're ready to get started, both initialized **/
     while(t_samples--)
     {
-    	/* Input stream - can be replaced with a file read*/
-    	data_t input_data = (data_t)(rand() % 100);
+        /* Input stream - can be replaced with a file read*/
+        data_t input_data = (data_t)(rand() % 100);
         while(!out->push(input_data));
     }
 #ifdef VL
@@ -224,7 +224,7 @@ queued_fir1(unsigned int samples, atomic_t &ready)
     /* Specify the desired filter here */
     data_t coeffs[TAPS_FIR1] = {0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8,
                                 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1};
-    
+
     FIR *fir1= new FIR(coeffs, TAPS_FIR1);
     data_t input_data;
     ready++;
@@ -232,8 +232,8 @@ queued_fir1(unsigned int samples, atomic_t &ready)
     /** we're ready to get started, both initialized **/
     while(t_samples--)
     {
-    	/* Input stream - can be replaced with a file read*/
-    	while(!in->pop(input_data));
+        /* Input stream - can be replaced with a file read*/
+        while(!in->pop(input_data));
         while(!out->push(fir1->filter(input_data)));
     }
 #ifdef VL
@@ -262,7 +262,7 @@ queued_fir2(unsigned int samples, atomic_t &ready)
     /* Specify the desired filter here */
     data_t coeffs[TAPS_FIR2] = {0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1,
                                 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8};
-    
+
     FIR *fir2= new FIR(coeffs, TAPS_FIR2);
     data_t input_data;
     ready++;
@@ -270,8 +270,8 @@ queued_fir2(unsigned int samples, atomic_t &ready)
     /** we're ready to get started, both initialized **/
     while(t_samples--)
     {
-    	/* Input stream - can be replaced with a file read*/
-    	while(!in->pop(input_data));
+        /* Input stream - can be replaced with a file read*/
+        while(!in->pop(input_data));
         while(!out->push(fir2->filter(input_data)));
     }
 #ifdef VL
@@ -301,7 +301,7 @@ output_stream(unsigned int samples, atomic_t &ready)
     /** we're ready to get started, both initialized **/
     while(t_samples--)
     {
-    	/* Output stream - can be replaced with a file write*/
+        /* Output stream - can be replaced with a file write*/
         while(!in->pop(output_data));
     }
     return; /** end of output_stream function **/
@@ -339,7 +339,7 @@ int main( int argc, char **argv )
 #ifdef VERBOSE
     std::cout << "VL queues opened\n";
 #endif
-#endif 
+#endif
 
     atomic_t ready(-1);
 

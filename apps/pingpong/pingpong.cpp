@@ -98,6 +98,67 @@ vl_q_t mosi_vl,
 
 #endif
 
+#ifdef M5VL
+struct m5_q_t {
+  int vlink_id = 0;
+  std::uint8_t __attribute__((aligned(64))) prod_line[64];
+  std::uint8_t __attribute__((aligned(64))) cons_line[64];
+  bool push(ball_t ball) {
+    uint8_t Ptr = prod_line[62] & 0x3f;
+    if (48 < Ptr) { /* no empty space left */
+      m5_vl_push((uint64_t)prod_line, vlink_id); /* always succeed */
+      prod_line[62] = 0xf0; /* Ptr = 0x30 = 48 */
+      Ptr = prod_line[62] & 0x3f;
+    }
+    uint64_t *pval64 = (uint64_t*) &prod_line[Ptr];
+    *pval64 = ball.val;
+    Ptr -= 8;
+    if (48 < Ptr) { /* filled up */
+      m5_vl_push((uint64_t)prod_line, vlink_id);
+      prod_line[62] = 0xf0; /* Ptr = 0x30 = 48 */
+      Ptr = prod_line[62] & 0x3f;
+    }
+    prod_line[62] = (prod_line[62] & 0xc0) | (Ptr & 0x3f);
+    return true;
+  }
+  bool pop(ball_t &ball) {
+    uint8_t Ptr = cons_line[62] & 0x3f;
+    bool isvalid = false;
+    if (48 >= Ptr) { /* has valid data */
+      uint64_t *pval64 = (uint64_t*) &cons_line[Ptr];
+      ball.val = *pval64;
+      Ptr -= 8;
+      isvalid = true;
+    }
+    if (48 < Ptr) { /* empty */
+      m5_vl_pop((uint64_t)cons_line, vlink_id);
+    }
+    cons_line[62] = (cons_line[62] & 0xc0) | ((Ptr - 8) & 0x3f);
+    return isvalid;
+  }
+  void open(int fd) {
+    vlink_id = fd;
+    prod_line[63] = cons_line[63] = 0;
+    prod_line[62] = 0xf0; /* Ptr = 0x30 = 48 */
+    cons_line[62] = 0xf8; /* Ptr = 0x38 = 56, underflow */
+  }
+  void close() {
+    uint8_t Ptr = prod_line[62] & 0x3f;
+    if (((Ptr + 8) & 0x3f) < 0x38) { /* prod_line has data left */
+      m5_vl_push((uint64_t)prod_line, vlink_id);
+    }
+    Ptr = cons_line[62] & 0x3f;
+    int num_valid = (Ptr + 8) < 0x38 ? (Ptr + 8) : 0;
+    if (num_valid) {
+      printf("TODO: transform cons_line to prod_line and push\n");
+    }
+  }
+};
+
+m5_q_t mosi_m5,
+       miso_m5;
+#endif
+
 struct alignas( 64 ) /** align to 64B boundary **/ playerArgs
 {
     std::uint64_t       burst;
@@ -105,6 +166,9 @@ struct alignas( 64 ) /** align to 64B boundary **/ playerArgs
 #ifdef VL
     vl_q_t              *qmosi  = nullptr;
     vl_q_t              *qmiso  = nullptr;
+#elif M5VL
+    m5_q_t              *qmosi  = nullptr;
+    m5_q_t              *qmiso  = nullptr;
 #else
     boost_q_t           *qmosi  = nullptr;
     boost_q_t           *qmiso  = nullptr;
@@ -217,8 +281,11 @@ int main( int argc, char **argv )
     }
     miso_vl.open(miso_vl_fd);
 #ifdef VERBOSE
-    std::cout << "VL queues opened\n";
+    std::cout << "vlinks created\n";
 #endif
+#elif M5VL
+    mosi_m5.open(1);
+    miso_m5.open(2);
 #endif /** end initiation of VL **/
 
     atomic_t    ready( -1 );
@@ -230,6 +297,9 @@ int main( int argc, char **argv )
 #ifdef VL
     args[0].qmosi   = &mosi_vl;
     args[0].qmiso   = &miso_vl;
+#elif M5VL
+    args[0].qmosi   = &mosi_m5;
+    args[0].qmiso   = &miso_m5;
 #else
     args[0].qmosi   = &mosi_boost;
     args[0].qmiso   = &miso_boost;
@@ -239,6 +309,9 @@ int main( int argc, char **argv )
 #ifdef VL
     args[1].qmosi   = &mosi_vl;
     args[1].qmiso   = &miso_vl;
+#elif M5VL
+    args[1].qmosi   = &mosi_m5;
+    args[1].qmiso   = &miso_m5;
 #else
     args[1].qmosi   = &mosi_boost;
     args[1].qmiso   = &miso_boost;

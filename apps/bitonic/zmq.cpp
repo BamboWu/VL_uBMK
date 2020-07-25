@@ -148,8 +148,8 @@ void sort(int *arr, const uint64_t len) {
     } // if (!to_connect.empty())
   } // while (true)
   //delete[] ccount;
-  delete[] pcount;
   lock.done = true; // tell other worker threads we are done
+  delete[] pcount;
 
 #ifndef NOGEM5
   m5_dump_reset_stats(0, 0);

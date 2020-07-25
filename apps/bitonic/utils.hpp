@@ -9,6 +9,10 @@
 #define NUM_RSWAP_WORKERS 1
 #endif
 
+#ifndef NUM_SLAVES
+#define NUM_SLAVES 1
+#endif
+
 template <typename T>
 union Message { // Cacheline-size message
   struct {
@@ -16,20 +20,23 @@ union Message { // Cacheline-size message
     uint64_t len;
     uint64_t beg;
     uint64_t end;
+    bool torswap;
   } arr;
   uint8_t pad[64]; // make sure it is cacheline-size message
   Message() {}
-  Message(T *base, uint64_t len, uint64_t beg, uint64_t end) {
+  Message(T *base, uint64_t len, uint64_t beg, uint64_t end, bool r=false) {
     arr.base = base;
     arr.len = len;
     arr.beg = beg;
     arr.end = end;
+    arr.torswap = r;
   }
   Message(const Message &rhs) {
     arr.base = rhs.arr.base;
     arr.len = rhs.arr.len;
     arr.beg = rhs.arr.beg;
     arr.end = rhs.arr.end;
+    arr.torswap = rhs.arr.torswap;
   }
 } __attribute__((packed, aligned(64)));
 

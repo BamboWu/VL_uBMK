@@ -74,12 +74,11 @@ void slave(const int desired_core) {
       twin_vl_pop_weak(&toslave_cons, &dummy);
       twin_vl_pop_weak(&toslave_cons, &dummy);
       int *arr_tmp = (int *)arr_base;
-      arr_tmp = &arr_tmp[arr_beg];
       uint64_t len_tmp = arr_end - arr_beg;
       if (isrswap) {
-        rswap(arr_tmp, len_tmp);
+        rswap(&arr_tmp[arr_beg], len_tmp);
       } else {
-        swap(arr_tmp, len_tmp);
+        swap(&arr_tmp[arr_beg], len_tmp);
       }
       while (2 < len_tmp) {
         len_tmp >>= 1;

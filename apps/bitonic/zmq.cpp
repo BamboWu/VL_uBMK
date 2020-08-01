@@ -20,8 +20,6 @@
 #include "gem5/m5ops.h"
 #endif
 
-#define MAX_ARRLEN 65536
-
 #ifndef STDTHREAD
 using boost::thread;
 #else
@@ -97,7 +95,7 @@ void sort(int *arr, const uint64_t len) {
   assert(ctx);
   void *to_slave_prod = zmq_socket(ctx, ZMQ_PUSH);
   assert(to_slave_prod);
-  const int bufl = (MAX_ARRLEN << 1) * sizeof(int);
+  const int bufl = (MAX_ON_THE_FLY << 1) * sizeof(int);
   const int zero = 0;
   assert(0 == zmq_setsockopt(to_slave_prod, ZMQ_SNDBUF, &bufl, sizeof(bufl)));
   assert(0 == zmq_setsockopt(to_slave_prod, ZMQ_SNDHWM, &zero, sizeof(zero)));
@@ -121,10 +119,16 @@ void sort(int *arr, const uint64_t len) {
   // every two elements form a biotonic subarray, ready for swap
   Message<int> msg(arr, len, 0, 2);
   const int msg_size = sizeof(msg);
-  for (uint64_t i = 0; len > i; i += 2) {
-    msg.arr.beg = i;
-    msg.arr.end = i + 2;
+  uint64_t feed_in = 0;  // record how long the array has been feed in
+  uint64_t on_the_fly = 0;  // count how mange messages on the fly
+  for (; len > feed_in;) {
+    msg.arr.beg = feed_in;
+    feed_in += 2;
+    msg.arr.end = feed_in;
     assert(msg_size == zmq_send(to_slave_prod, &msg, msg_size, 0));
+    if (++on_the_fly >= MAX_ON_THE_FLY) {
+      break;
+    }
   }
 
   uint8_t *pcount = new uint8_t[len](); // count number of pairing
@@ -144,8 +148,19 @@ void sort(int *arr, const uint64_t len) {
         msg.arr.end = idx_2nd + len_sorted;
         msg.arr.torswap = true;
         assert(msg_size == zmq_send(to_slave_prod, &msg, msg_size, 0));
-      } // if (paird)
+      } else {
+        on_the_fly--;
+      }
     } // if (!to_connect.empty())
+    // feed in remaining array if space
+    if (len > feed_in && MAX_ON_THE_FLY > on_the_fly) {
+      msg.arr.beg = feed_in;
+      feed_in += 2;
+      msg.arr.end = feed_in;
+      msg.arr.torswap = false;
+      on_the_fly++;
+      assert(msg_size == zmq_send(to_slave_prod, &msg, msg_size, 0));
+    }
   } // while (true)
   //delete[] ccount;
   lock.done = true; // tell other worker threads we are done
@@ -170,10 +185,6 @@ int main(int argc, char *argv[]) {
     len = strtoull(argv[1], NULL, 0);
   }
   const uint64_t len_roundup = roundup64(len);
-  if (len_roundup > MAX_ARRLEN) {
-    std::cout << "Please raise MAX_ARRLEN (" << MAX_ARRLEN << " now)\n";
-    return 0;
-  }
   int *arr = (int*) memalign(64, len_roundup * sizeof(int));
   gen(arr, len);
   fill(&arr[len], len_roundup - len, INT_MAX); // padding

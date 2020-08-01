@@ -1,12 +1,8 @@
 #ifndef _BITONIC_UTILS_HPP__
 #define _BITONIC_UTILS_HPP__
 
-#ifndef NUM_SWAP_WORKERS
-#define NUM_SWAP_WORKERS 1
-#endif
-
-#ifndef NUM_RSWAP_WORKERS
-#define NUM_RSWAP_WORKERS 1
+#ifndef MAX_ON_THE_FLY
+#define MAX_ON_THE_FLY 128
 #endif
 
 #ifndef NUM_SLAVES

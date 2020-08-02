@@ -145,15 +145,21 @@ void sort(int *arr, const uint64_t len) {
 #endif
 
   // every two elements form a biotonic subarray, ready for swap
-  for (uint64_t i = 0; len > i; i += 2) {
+  uint64_t feed_in = 0;  // record how long the array has been feed in
+  uint64_t on_the_fly = 0;  // count how mange messages on the fly
+  for (; len > feed_in;) {
     twin_vl_push_weak(&toslave_prod, (uint64_t)arr);
     twin_vl_push_weak(&toslave_prod, len);
-    twin_vl_push_weak(&toslave_prod, i);
-    twin_vl_push_weak(&toslave_prod, i + 2);
+    twin_vl_push_weak(&toslave_prod, feed_in);
+    feed_in += 2;
+    twin_vl_push_weak(&toslave_prod, feed_in);
     twin_vl_push_weak(&toslave_prod, 0);  // isrswap = false
     // two dummy pushs to let the message take an entire cacheline
     twin_vl_push_weak(&toslave_prod, 0);
     twin_vl_push_weak(&toslave_prod, 0);
+    if (++on_the_fly > MAX_ON_THE_FLY) {
+      break;
+    }
   }
 
   uint8_t *pcount = new uint8_t[len](); // count number of pairing
@@ -182,8 +188,23 @@ void sort(int *arr, const uint64_t len) {
         // two dummy pushs to let the message take an entire cacheline
         twin_vl_push_weak(&toslave_prod, 0);
         twin_vl_push_weak(&toslave_prod, 0);
-      } // if (paird)
+      } else {
+        on_the_fly--;
+      }
     } // if (isvalid)
+    // feed in remaining array if space
+    if (len > feed_in && MAX_ON_THE_FLY > on_the_fly) {
+      twin_vl_push_weak(&toslave_prod, (uint64_t)arr);
+      twin_vl_push_weak(&toslave_prod, len);
+      twin_vl_push_weak(&toslave_prod, feed_in);
+      feed_in += 2;
+      twin_vl_push_weak(&toslave_prod, feed_in);
+      twin_vl_push_weak(&toslave_prod, 0);  // isrswap = false
+      // two dummy pushs to let the message take an entire cacheline
+      twin_vl_push_weak(&toslave_prod, 0);
+      twin_vl_push_weak(&toslave_prod, 0);
+      on_the_fly++;
+    }
   } // while (true)
 
   lock.done = true; // tell other worker threads we are done

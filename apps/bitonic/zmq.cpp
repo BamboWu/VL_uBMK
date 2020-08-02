@@ -151,15 +151,15 @@ void sort(int *arr, const uint64_t len) {
       } else {
         on_the_fly--;
       }
-    } // if (!to_connect.empty())
+    } // if (!to_master.empty())
     // feed in remaining array if space
     if (len > feed_in && MAX_ON_THE_FLY > on_the_fly) {
       msg.arr.beg = feed_in;
       feed_in += 2;
       msg.arr.end = feed_in;
       msg.arr.torswap = false;
-      on_the_fly++;
       assert(msg_size == zmq_send(to_slave_prod, &msg, msg_size, 0));
+      on_the_fly++;
     }
   } // while (true)
   //delete[] ccount;

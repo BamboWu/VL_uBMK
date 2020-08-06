@@ -21,6 +21,8 @@ if(ZMQ_STATIC_FOUND OR ZMQ_DYNAMIC_FOUND)
   if(NOT Boost_THREAD_FOUND)
     # fall back to use pthread library find in the top CMakeLists.txt
     target_compile_definitions(bitonic_zmq PRIVATE -DSTDTHREAD)
+  else()
+    target_link_libraries(bitonic_zmq ${Boost_LIBRARIES})
   endif()
 elseif(NOT (ZMQ_STATIC_FOUND OR ZMQ_DYNAMIC_FOUND))
   MESSAGE(STATUS "WARNING: No zmq library, skip bitonic_zmq.")

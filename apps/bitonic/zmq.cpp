@@ -13,7 +13,13 @@
 #include <thread>
 #endif
 
+#include <chrono>
+using std::chrono::high_resolution_clock;
+using std::chrono::duration_cast;
+using std::chrono::nanoseconds;
+
 #include "threading.h"
+#include "timing.h"
 #include "utils.hpp"
 
 #ifndef NOGEM5
@@ -112,6 +118,9 @@ void sort(int *arr, const uint64_t len) {
     slave_threads.push_back(thread(slave, core_id++));
   }
 
+  const uint64_t beg_tsc = rdtsc();
+  const auto beg(high_resolution_clock::now());
+
 #ifndef NOGEM5
   m5_reset_stats(0, 0);
 #endif
@@ -169,6 +178,13 @@ void sort(int *arr, const uint64_t len) {
 #ifndef NOGEM5
   m5_dump_reset_stats(0, 0);
 #endif
+
+  const uint64_t end_tsc = rdtsc();
+  const auto end(high_resolution_clock::now());
+  const auto elapsed(duration_cast<nanoseconds>(end - beg));
+
+  std::cout << (end_tsc - beg_tsc) << " ticks elapsed\n";
+  std::cout << elapsed.count() << " ns elapsed\n";
 
   for (int i = NUM_SLAVES - 1; 0 <= i; --i) {
     slave_threads[i].join();

@@ -27,6 +27,11 @@
 #include "vl/vl.h"
 #endif
 
+#ifdef ZMQ
+#include <assert.h>
+#include <zmq.h>
+#endif
+
 #ifndef NOGEM5
 #include "gem5/m5ops.h"
 #endif
@@ -108,6 +113,41 @@ struct vl_q_t {
     }
     ~vl_q_t() { close(); }
 };
+
+#elif ZMQ
+void *ctx;
+
+struct zmq_q_t {
+  void *in;
+  void *out;
+  bool push(data_t data) {
+    assert(sizeof(data) == zmq_send(out, &data, sizeof(data), 0));
+    return true;
+  }
+  bool pop(data_t &data) {
+    bool valid = false;
+    if (0 < zmq_recv(in, &data, sizeof(data), ZMQ_DONTWAIT)) {
+      valid = true;
+    }
+    return valid;
+  }
+  void open(std::string port, bool isproducer) {
+    if (isproducer) {
+      out = zmq_socket(ctx, ZMQ_PUSH);
+      assert(0 == zmq_bind(out, ("inproc://" + port).c_str()));
+    } else {
+      in = zmq_socket(ctx, ZMQ_PULL);
+      assert(0 == zmq_connect(in, ("inproc://" + port).c_str()));
+    }
+  }
+  void close() {
+    assert(0 == zmq_close(in));
+    assert(0 == zmq_close(out));
+  }
+  ~zmq_q_t() { close(); }
+};
+
+zmq_q_t q_in_fir1, q_fir1_fir2, q_fir2_out;
 #else
 using boost_q_t = boost::lockfree::queue<data_t>;
 boost_q_t q_in_fir1   ( CAPACITY / sizeof(data_t) );
@@ -184,6 +224,9 @@ input_stream(unsigned int samples, atomic_t &ready)
     vl_q_t q_in_fir1_vl;
     q_in_fir1_vl.open(in_fir1_vl_fd, 1, true);
     vl_q_t *out = &q_in_fir1_vl;
+#elif ZMQ
+    q_in_fir1.open("in_fir1", true);
+    zmq_q_t *out = &q_in_fir1;
 #else
     boost_q_t *out  = &q_in_fir1;
 #endif
@@ -214,6 +257,11 @@ queued_fir1(unsigned int samples, atomic_t &ready)
     q_fir1_fir2_vl.open(fir1_fir2_vl_fd, 1, true);
     vl_q_t *in = &q_in_fir1_vl;
     vl_q_t *out = &q_fir1_fir2_vl;
+#elif ZMQ
+    q_in_fir1.open("in_fir1", false);
+    zmq_q_t *in = &q_in_fir1;
+    q_fir1_fir2.open("fir1_fir2", true);
+    zmq_q_t *out = &q_fir1_fir2;
 #else
     boost_q_t *in  = &q_in_fir1;
     boost_q_t *out = &q_fir1_fir2;
@@ -253,6 +301,11 @@ queued_fir2(unsigned int samples, atomic_t &ready)
     q_fir2_out_vl.open(fir2_out_vl_fd, 1, true);
     vl_q_t *in = &q_fir1_fir2_vl;
     vl_q_t *out = &q_fir2_out_vl;
+#elif ZMQ
+    q_fir1_fir2.open("fir1_fir2", false);
+    zmq_q_t *in = &q_fir1_fir2;
+    q_fir2_out.open("fir2_out", true);
+    zmq_q_t *out = &q_fir2_out;
 #else
     boost_q_t *in  = &q_fir1_fir2;
     boost_q_t *out = &q_fir2_out;
@@ -290,6 +343,9 @@ output_stream(unsigned int samples, atomic_t &ready)
     vl_q_t q_fir2_out_vl;
     q_fir2_out_vl.open(fir2_out_vl_fd, 1, false);
     vl_q_t *in = &q_fir2_out_vl;
+#elif ZMQ
+    q_fir2_out.open("fir2_out", false);
+    zmq_q_t *in = &q_fir2_out;
 #else
     boost_q_t *in = &q_fir2_out;
 #endif
@@ -339,6 +395,11 @@ int main( int argc, char **argv )
 #ifdef VERBOSE
     std::cout << "VL queues opened\n";
 #endif
+#endif
+
+#ifdef ZMQ
+    ctx = zmq_ctx_new();
+    assert(ctx);
 #endif
 
     atomic_t ready(-1);

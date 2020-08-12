@@ -1,6 +1,7 @@
 #include <iostream>
 #include <cstdint>
 #include <cstdlib>
+#include <string>
 #include <boost/lockfree/queue.hpp>
 
 #ifndef STDATOMIC
@@ -24,6 +25,11 @@
 
 #ifdef VL
 #include "vl/vl.h"
+#endif
+
+#ifdef ZMQ
+#include <assert.h>
+#include <zmq.h>
 #endif
 
 #ifndef NOGEM5
@@ -98,6 +104,40 @@ vl_q_t mosi_vl,
 
 #endif
 
+#ifdef ZMQ
+void *ctx;
+
+struct zmq_q_t {
+  void *in;
+  void *out;
+  bool push(ball_t ball) {
+    assert(sizeof(ball) == zmq_send(out, &ball, sizeof(ball), 0));
+    return true;
+  }
+  bool pop(ball_t &ball) {
+    bool valid = false;
+    if (0 < zmq_recv(in, &ball, sizeof(ball), ZMQ_DONTWAIT)) {
+      valid = true;
+    }
+    return valid;
+  }
+  void open(std::string port) {
+    in = zmq_socket(ctx, ZMQ_PULL);
+    out = zmq_socket(ctx, ZMQ_PUSH);
+    assert(0 == zmq_bind(out, ("inproc://" + port).c_str()));
+    assert(0 == zmq_connect(in, ("inproc://" + port).c_str()));
+  }
+  void close() {
+    assert(0 == zmq_close(in));
+    assert(0 == zmq_close(out));
+  }
+  ~zmq_q_t() { close(); }
+};
+
+zmq_q_t mosi_zmq,
+        miso_zmq;
+#endif
+
 #ifdef M5VL
 struct m5_q_t {
   int vlink_id = 0;
@@ -169,6 +209,9 @@ struct alignas( 64 ) /** align to 64B boundary **/ playerArgs
 #elif M5VL
     m5_q_t              *qmosi  = nullptr;
     m5_q_t              *qmiso  = nullptr;
+#elif ZMQ
+    zmq_q_t             *qmosi  = nullptr;
+    zmq_q_t             *qmiso  = nullptr;
 #else
     boost_q_t           *qmosi  = nullptr;
     boost_q_t           *qmiso  = nullptr;
@@ -288,6 +331,13 @@ int main( int argc, char **argv )
     miso_m5.open(2);
 #endif /** end initiation of VL **/
 
+#ifdef ZMQ
+    ctx = zmq_ctx_new();
+    assert(ctx);
+    mosi_zmq.open("mosi");
+    miso_zmq.open("miso");
+#endif
+
     atomic_t    ready( -1 );
 
     playerArgs args[2];
@@ -300,6 +350,9 @@ int main( int argc, char **argv )
 #elif M5VL
     args[0].qmosi   = &mosi_m5;
     args[0].qmiso   = &miso_m5;
+#elif ZMQ
+    args[0].qmosi   = &mosi_zmq;
+    args[0].qmiso   = &miso_zmq;
 #else
     args[0].qmosi   = &mosi_boost;
     args[0].qmiso   = &miso_boost;
@@ -312,6 +365,9 @@ int main( int argc, char **argv )
 #elif M5VL
     args[1].qmosi   = &mosi_m5;
     args[1].qmiso   = &miso_m5;
+#elif ZMQ
+    args[1].qmosi   = &mosi_zmq;
+    args[1].qmiso   = &miso_zmq;
 #else
     args[1].qmosi   = &mosi_boost;
     args[1].qmiso   = &miso_boost;

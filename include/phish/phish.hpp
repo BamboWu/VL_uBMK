@@ -5,7 +5,7 @@
 #include <stdexcept>
 #include <vector>
 
-#include <phish.h>
+#include "phish.h"
 
 namespace phish
 {

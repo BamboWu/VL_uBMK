@@ -18,9 +18,9 @@
 struct zmq_minnow
 {
   std::string control_port_internal;
-  std::string control_port_external;
+  //std::string control_port_external; // IPC never remote
   std::string input_port_internal;
-  std::string input_port_external;
+  //std::string input_port_external; // IPC never remote
 };
 
 const std::string quoted_string(const std::string& string)
@@ -44,22 +44,24 @@ int phish_bait_start()
     // Assign control port addresses ...
     for(unsigned int i = 0; i != zmq_minnows.size(); ++i)
     {
-      const school& school = g_schools[g_minnows[i].school_index];
-      const minnow& minnow = g_minnows[i];
+      //const school& school = g_schools[g_minnows[i].school_index];
+      //const minnow& minnow = g_minnows[i];
 
-      zmq_minnows[i].control_port_internal = "tcp://*:" + string_cast(next_port);
-      zmq_minnows[i].control_port_external = "tcp://" + school.hosts[minnow.local_id] + ":" + string_cast(next_port);
+      zmq_minnows[i].control_port_internal = "ipc:///tmp/endpt" + string_cast(next_port);
+      // IPC never remote
+      //zmq_minnows[i].control_port_external = "tcp://" + school.hosts[minnow.local_id] + ":" + string_cast(next_port);
       ++next_port;
     }
 
     // Assign input port addresses ...
     for(unsigned int i = 0; i != zmq_minnows.size(); ++i)
     {
-      const school& school = g_schools[g_minnows[i].school_index];
-      const minnow& minnow = g_minnows[i];
+      //const school& school = g_schools[g_minnows[i].school_index];
+      //const minnow& minnow = g_minnows[i];
 
-      zmq_minnows[i].input_port_internal = "tcp://*:" + string_cast(next_port);
-      zmq_minnows[i].input_port_external = "tcp://" + school.hosts[minnow.local_id] + ":" + string_cast(next_port);
+      zmq_minnows[i].input_port_internal = "ipc:///tmp/endpt" + string_cast(next_port);
+      // IPC never remote
+      //zmq_minnows[i].input_port_external = "tcp://" + school.hosts[minnow.local_id] + ":" + string_cast(next_port);
       ++next_port;
     }
 
@@ -75,7 +77,7 @@ int phish_bait_start()
       const minnow& minnow = g_minnows[i];
       const std::string host = school.hosts[minnow.local_id];
 
-      const bool remote = host != "" && host != "localhost" && host != "127.0.0.1";
+      const bool remote = false; // With ipc protocal, never remote
 
       std::vector<std::string> arguments;
       arguments.insert(arguments.end(), school.arguments.begin(), school.arguments.end());
@@ -118,7 +120,7 @@ int phish_bait_start()
       {
         std::ostringstream buffer;
         for(std::vector<int>::const_iterator i = connection->input_indices.begin(); i != connection->input_indices.end(); ++i)
-          buffer << "+" << zmq_minnows[*i].input_port_external;
+          buffer << "+" << zmq_minnows[*i].input_port_internal;  // IPC never remote
 
         std::ostringstream buffer2;
         buffer2 << string_cast(connection->output_port) << "+" << connection->send_pattern << "+" << string_cast(connection->input_port) << buffer.str();
@@ -177,7 +179,7 @@ int phish_bait_start()
     for(unsigned int i = 0; i != processes.size(); ++i)
     {
       void* const socket = zmq_socket(context, ZMQ_REQ);
-      zmq_connect(socket, zmq_minnows[i].control_port_external.c_str());
+      zmq_connect(socket, zmq_minnows[i].control_port_internal.c_str()); // IPC never remote
       zmq_send(socket, "start", strlen("start"), 0);
 
       std::string response(2, '\0');

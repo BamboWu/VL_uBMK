@@ -1,5 +1,6 @@
 #ifndef _TIMING_H__
 #define _TIMING_H__  1
+#include <stdint.h>
 
 #ifdef __cplusplus
 extern "C" {

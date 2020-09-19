@@ -92,6 +92,9 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
 
   int i;
 #ifdef VL
+  const int nblks = (msgSz + 55) / 56;
+  char buf[64];
+  uint16_t *blkId = (uint16_t*)buf; /* used to reorder cache blocks */
   uint16_t idx;
   size_t cnt;
 #endif
@@ -102,7 +105,7 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
       assert(msgSz == zmq_recv(xDnRecv, (void*)xRecvBuffer, msgSz, 0));
 #elif VL
       for (idx = 0; nblks > idx; ++idx) {
-        line_vl_pop_weak(&xDnRecv, (uint8_t*)buf, &cnt);
+        line_vl_pop_weak(xDnRecv, (uint8_t*)buf, &cnt);
         memcpy((void*)&xRecvBuffer[7*(*blkId)],
                (void*)&buf[sizeof(uint16_t)],
                ((nblks - 1) > *blkId ? 7 : nblks % 7) *sizeof(double));
@@ -114,7 +117,7 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
       assert(msgSz == zmq_recv(yDnRecv, (void*)yRecvBuffer, msgSz, 0));
 #elif VL
       for (idx = 0; nblks > idx; ++idx) {
-        line_vl_pop_weak(&yDnRecv, (uint8_t*)buf, &cnt);
+        line_vl_pop_weak(yDnRecv, (uint8_t*)buf, &cnt);
         memcpy((void*)&yRecvBuffer[7*(*blkId)],
                (void*)&buf[sizeof(uint16_t)],
                ((nblks - 1) > *blkId ? 7 : nblks % 7) *sizeof(double));
@@ -130,7 +133,7 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
         *blkId = idx;
         cnt = ((nblks - 1) > idx ? 7 : nblks % 7) * sizeof(double);
         memcpy((void*)&buf[sizeof(uint16_t)], (void*)&xSendBuffer[7*idx], cnt);
-        line_vl_push_strong(&xUpSend, (void*)buf, cnt + sizeof(uint16_t));
+        line_vl_push_strong(xUpSend, (uint8_t*)buf, cnt + sizeof(uint16_t));
       }
 #endif
     }
@@ -142,7 +145,7 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
         *blkId = idx;
         cnt = ((nblks - 1) > idx ? 7 : nblks % 7) * sizeof(double);
         memcpy((void*)&buf[sizeof(uint16_t)], (void*)&ySendBuffer[7*idx], cnt);
-        line_vl_push_strong(&yUpSend, (void*)buf, cnt + sizeof(uint16_t));
+        line_vl_push_strong(yUpSend, (uint8_t*)buf, cnt + sizeof(uint16_t));
       }
 #endif
     }
@@ -153,7 +156,7 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
       assert(msgSz == zmq_recv(xUpRecv, (void*)xRecvBuffer, msgSz, 0));
 #elif VL
       for (idx = 0; nblks > idx; ++idx) {
-        line_vl_pop_weak(&xUpRecv, (uint8_t*)buf, &cnt);
+        line_vl_pop_weak(xUpRecv, (uint8_t*)buf, &cnt);
         memcpy((void*)&xRecvBuffer[7*(*blkId)],
                (void*)&buf[sizeof(uint16_t)],
                ((nblks - 1) > *blkId ? 7 : nblks % 7) *sizeof(double));
@@ -165,7 +168,7 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
       assert(msgSz == zmq_recv(yDnRecv, (void*)yRecvBuffer, msgSz, 0));
 #elif VL
       for (idx = 0; nblks > idx; ++idx) {
-        line_vl_pop_weak(&yDnRecv, (uint8_t*)buf, &cnt);
+        line_vl_pop_weak(yDnRecv, (uint8_t*)buf, &cnt);
         memcpy((void*)&yRecvBuffer[7*(*blkId)],
                (void*)&buf[sizeof(uint16_t)],
                ((nblks - 1) > *blkId ? 7 : nblks % 7) *sizeof(double));
@@ -181,7 +184,7 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
         *blkId = idx;
         cnt = ((nblks - 1) > idx ? 7 : nblks % 7) * sizeof(double);
         memcpy((void*)&buf[sizeof(uint16_t)], (void*)&xSendBuffer[7*idx], cnt);
-        line_vl_push_strong(&xDnSend, (void*)buf, cnt + sizeof(uint16_t));
+        line_vl_push_strong(xDnSend, (uint8_t*)buf, cnt + sizeof(uint16_t));
       }
 #endif
     }
@@ -193,7 +196,7 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
         *blkId = idx;
         cnt = ((nblks - 1) > idx ? 7 : nblks % 7) * sizeof(double);
         memcpy((void*)&buf[sizeof(uint16_t)], (void*)&ySendBuffer[7*idx], cnt);
-        line_vl_push_strong(&yUpSend, (void*)buf, cnt + sizeof(uint16_t));
+        line_vl_push_strong(yUpSend, (uint8_t*)buf, cnt + sizeof(uint16_t));
       }
 #endif
     }
@@ -204,7 +207,7 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
       assert(msgSz == zmq_recv(xUpRecv, (void*)xRecvBuffer, msgSz, 0));
 #elif VL
       for (idx = 0; nblks > idx; ++idx) {
-        line_vl_pop_weak(&xUpRecv, (uint8_t*)buf, &cnt);
+        line_vl_pop_weak(xUpRecv, (uint8_t*)buf, &cnt);
         memcpy((void*)&xRecvBuffer[7*(*blkId)],
                (void*)&buf[sizeof(uint16_t)],
                ((nblks - 1) > *blkId ? 7 : nblks % 7) *sizeof(double));
@@ -216,7 +219,7 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
       assert(msgSz == zmq_recv(yUpRecv, (void*)yRecvBuffer, msgSz, 0));
 #elif VL
       for (idx = 0; nblks > idx; ++idx) {
-        line_vl_pop_weak(&yUpRecv, (uint8_t*)buf, &cnt);
+        line_vl_pop_weak(yUpRecv, (uint8_t*)buf, &cnt);
         memcpy((void*)&yRecvBuffer[7*(*blkId)],
                (void*)&buf[sizeof(uint16_t)],
                ((nblks - 1) > *blkId ? 7 : nblks % 7) *sizeof(double));
@@ -232,7 +235,7 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
         *blkId = idx;
         cnt = ((nblks - 1) > idx ? 7 : nblks % 7) * sizeof(double);
         memcpy((void*)&buf[sizeof(uint16_t)], (void*)&xSendBuffer[7*idx], cnt);
-        line_vl_push_strong(&xDnSend, (void*)buf, cnt + sizeof(uint16_t));
+        line_vl_push_strong(xDnSend, (uint8_t*)buf, cnt + sizeof(uint16_t));
       }
 #endif
     }
@@ -244,7 +247,7 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
         *blkId = idx;
         cnt = ((nblks - 1) > idx ? 7 : nblks % 7) * sizeof(double);
         memcpy((void*)&buf[sizeof(uint16_t)], (void*)&ySendBuffer[7*idx], cnt);
-        line_vl_push_strong(&yDnSend, (void*)buf, cnt + sizeof(uint16_t));
+        line_vl_push_strong(yDnSend, (uint8_t*)buf, cnt + sizeof(uint16_t));
       }
 #endif
     }
@@ -255,7 +258,7 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
       assert(msgSz == zmq_recv(xDnRecv, (void*)xRecvBuffer, msgSz, 0));
 #elif VL
       for (idx = 0; nblks > idx; ++idx) {
-        line_vl_pop_weak(&xDnRecv, (uint8_t*)buf, &cnt);
+        line_vl_pop_weak(xDnRecv, (uint8_t*)buf, &cnt);
         memcpy((void*)&xRecvBuffer[7*(*blkId)],
                (void*)&buf[sizeof(uint16_t)],
                ((nblks - 1) > *blkId ? 7 : nblks % 7) *sizeof(double));
@@ -267,7 +270,7 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
       assert(msgSz == zmq_recv(yUpRecv, (void*)yRecvBuffer, msgSz, 0));
 #elif VL
       for (idx = 0; nblks > idx; ++idx) {
-        line_vl_pop_weak(&yUpRecv, (uint8_t*)buf, &cnt);
+        line_vl_pop_weak(yUpRecv, (uint8_t*)buf, &cnt);
         memcpy((void*)&yRecvBuffer[7*(*blkId)],
                (void*)&buf[sizeof(uint16_t)],
                ((nblks - 1) > *blkId ? 7 : nblks % 7) *sizeof(double));
@@ -283,7 +286,7 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
         *blkId = idx;
         cnt = ((nblks - 1) > idx ? 7 : nblks % 7) * sizeof(double);
         memcpy((void*)&buf[sizeof(uint16_t)], (void*)&xSendBuffer[7*idx], cnt);
-        line_vl_push_strong(&xUpSend, (void*)buf, cnt + sizeof(uint16_t));
+        line_vl_push_strong(xUpSend, (uint8_t*)buf, cnt + sizeof(uint16_t));
       }
 #endif
     }
@@ -295,7 +298,7 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
         *blkId = idx;
         cnt = ((nblks - 1) > idx ? 7 : nblks % 7) * sizeof(double);
         memcpy((void*)&buf[sizeof(uint16_t)], (void*)&ySendBuffer[7*idx], cnt);
-        line_vl_push_strong(&yDnSend, (void*)buf, cnt + sizeof(uint16_t));
+        line_vl_push_strong(yDnSend, (uint8_t*)buf, cnt + sizeof(uint16_t));
       }
 #endif
     }
@@ -317,6 +320,9 @@ void halo(const int xUp, const int xDn, const int yUp, const int yDn,
 
   int i;
 #if VL
+  const int nblks = (msgSz + 55) / 56;
+  char buf[64];
+  uint16_t *blkId = (uint16_t*)buf; /* used to reorder cache blocks */
   uint16_t idx;
   size_t cnt;
 #endif
@@ -332,7 +338,7 @@ void halo(const int xUp, const int xDn, const int yUp, const int yDn,
         *blkId = idx;
         cnt = ((nblks - 1) > idx ? 7 : nblks % 7) * sizeof(double);
         memcpy((void*)&buf[sizeof(uint16_t)], (void*)&xSendBuffer[7*idx], cnt);
-        line_vl_push_strong(&xUpSend, (void*)buf, cnt + sizeof(uint16_t));
+        line_vl_push_strong(xUpSend, (uint8_t*)buf, cnt + sizeof(uint16_t));
       }
 #endif
     }
@@ -344,7 +350,7 @@ void halo(const int xUp, const int xDn, const int yUp, const int yDn,
         *blkId = idx;
         cnt = ((nblks - 1) > idx ? 7 : nblks % 7) * sizeof(double);
         memcpy((void*)&buf[sizeof(uint16_t)], (void*)&xSendBuffer[7*idx], cnt);
-        line_vl_push_strong(&xDnSend, (void*)buf, cnt + sizeof(uint16_t));
+        line_vl_push_strong(xDnSend, (uint8_t*)buf, cnt + sizeof(uint16_t));
       }
 #endif
     }
@@ -356,7 +362,7 @@ void halo(const int xUp, const int xDn, const int yUp, const int yDn,
         *blkId = idx;
         cnt = ((nblks - 1) > idx ? 7 : nblks % 7) * sizeof(double);
         memcpy((void*)&buf[sizeof(uint16_t)], (void*)&ySendBuffer[7*idx], cnt);
-        line_vl_push_strong(&yUpSend, (void*)buf, cnt + sizeof(uint16_t));
+        line_vl_push_strong(yUpSend, (uint8_t*)buf, cnt + sizeof(uint16_t));
       }
 #endif
     }
@@ -368,7 +374,7 @@ void halo(const int xUp, const int xDn, const int yUp, const int yDn,
         *blkId = idx;
         cnt = ((nblks - 1) > idx ? 7 : nblks % 7) * sizeof(double);
         memcpy((void*)&buf[sizeof(uint16_t)], (void*)&ySendBuffer[7*idx], cnt);
-        line_vl_push_strong(&yDnSend, (void*)buf, cnt + sizeof(uint16_t));
+        line_vl_push_strong(yDnSend, (uint8_t*)buf, cnt + sizeof(uint16_t));
       }
 #endif
     }
@@ -379,7 +385,7 @@ void halo(const int xUp, const int xDn, const int yUp, const int yDn,
       assert(msgSz == zmq_recv(xUpRecv, (void*)xRecvBuffer, msgSz, 0));
 #elif VL
       for (idx = 0; nblks > idx; ++idx) {
-        line_vl_pop_weak(&xUpRecv, (uint8_t*)buf, &cnt);
+        line_vl_pop_weak(xUpRecv, (uint8_t*)buf, &cnt);
         memcpy((void*)&xRecvBuffer[7*(*blkId)],
                (void*)&buf[sizeof(uint16_t)],
                ((nblks - 1) > *blkId ? 7 : nblks % 7) *sizeof(double));
@@ -391,7 +397,7 @@ void halo(const int xUp, const int xDn, const int yUp, const int yDn,
       assert(msgSz == zmq_recv(xDnRecv, (void*)xRecvBuffer, msgSz, 0));
 #elif VL
       for (idx = 0; nblks > idx; ++idx) {
-        line_vl_pop_weak(&xDnRecv, (uint8_t*)buf, &cnt);
+        line_vl_pop_weak(xDnRecv, (uint8_t*)buf, &cnt);
         memcpy((void*)&xRecvBuffer[7*(*blkId)],
                (void*)&buf[sizeof(uint16_t)],
                ((nblks - 1) > *blkId ? 7 : nblks % 7) *sizeof(double));
@@ -403,7 +409,7 @@ void halo(const int xUp, const int xDn, const int yUp, const int yDn,
       assert(msgSz == zmq_recv(yUpRecv, (void*)yRecvBuffer, msgSz, 0));
 #elif VL
       for (idx = 0; nblks > idx; ++idx) {
-        line_vl_pop_weak(&yUpRecv, (uint8_t*)buf, &cnt);
+        line_vl_pop_weak(yUpRecv, (uint8_t*)buf, &cnt);
         memcpy((void*)&yRecvBuffer[7*(*blkId)],
                (void*)&buf[sizeof(uint16_t)],
                ((nblks - 1) > *blkId ? 7 : nblks % 7) *sizeof(double));
@@ -415,7 +421,7 @@ void halo(const int xUp, const int xDn, const int yUp, const int yDn,
       assert(msgSz == zmq_recv(yDnRecv, (void*)yRecvBuffer, msgSz, 0));
 #elif VL
       for (idx = 0; nblks > idx; ++idx) {
-        line_vl_pop_weak(&yDnRecv, (uint8_t*)buf, &cnt);
+        line_vl_pop_weak(yDnRecv, (uint8_t*)buf, &cnt);
         memcpy((void*)&yRecvBuffer[7*(*blkId)],
                (void*)&buf[sizeof(uint16_t)],
                ((nblks - 1) > *blkId ? 7 : nblks % 7) *sizeof(double));
@@ -475,9 +481,6 @@ void *worker(void *arg) {
     assert(0 == zmq_connect(yDnRecv, queue_str));
   }
 #elif VL
-  const int nblks = (msgSz + 55) / 56;
-  char buf[64];
-  uint16_t *blkId = (uint16_t*)buf; /* used to reorder cache blocks */
   vlendpt_t endpts[8];
   vlendpt_t *xUpSend = &endpts[0];
   vlendpt_t *xDnSend = &endpts[1];
@@ -488,20 +491,20 @@ void *worker(void *arg) {
   vlendpt_t *yUpRecv = &endpts[6];
   vlendpt_t *yDnRecv = &endpts[7];
   if (-1 < xUp) {
-    open_byte_vl_as_producer(xUpSend, xUpTx, 1);
-    open_byte_vl_as_consumer(xUpRecv, xUpRx, 1);
+    open_byte_vl_as_producer(xUpTx, xUpSend, 1);
+    open_byte_vl_as_consumer(xUpRx, xUpRecv, 1);
   }
   if (-1 < xDn) {
-    open_byte_vl_as_producer(xDnSend, xDnTx, 1);
-    open_byte_vl_as_consumer(xDnRecv, xDnRx, 1);
+    open_byte_vl_as_producer(xDnTx, xDnSend, 1);
+    open_byte_vl_as_consumer(xDnRx, xDnRecv, 1);
   }
   if (-1 < yUp) {
-    open_byte_vl_as_producer(yUpSend, yUpTx, 1);
-    open_byte_vl_as_consumer(yUpRecv, yUpRx, 1);
+    open_byte_vl_as_producer(yUpTx, yUpSend, 1);
+    open_byte_vl_as_consumer(yUpRx, yUpRecv, 1);
   }
   if (-1 < yDn) {
-    open_byte_vl_as_producer(yDnSend, yDnTx, 1);
-    open_byte_vl_as_consumer(yDnRecv, yDnRx, 1);
+    open_byte_vl_as_producer(yDnTx, yDnSend, 1);
+    open_byte_vl_as_consumer(yDnRx, yDnRecv, 1);
   }
 #endif
 
@@ -587,8 +590,8 @@ int main(int argc, char* argv[]) {
   ctx = zmq_ctx_new();
   assert(ctx);
 #elif VL
-  for (i = 0; pex * pey > i; ++i) {
-    mkvl();
+  for (i = 0; (pex * pey * 4) - (pex + pey) * 2 > i; ++i) {
+    mkvl(0);
   }
 #endif
   pthread_t threads[nthreads];

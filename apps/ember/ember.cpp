@@ -90,16 +90,17 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
            double *yRecvBuffer, double *ySendBuffer,
 #ifdef ZMQ
            void *xUpSend, void *xDnSend, void *yUpSend, void *yDnSend,
-           void *xUpRecv, void *xDnRecv, void *yUpRecv, void *yDnRecv) {
+           void *xUpRecv, void *xDnRecv, void *yUpRecv, void *yDnRecv
 #elif BOOST
            boost_q_t *xUpSend, boost_q_t *xDnSend, boost_q_t *yUpSend,
            boost_q_t *yDnSend, boost_q_t *xUpRecv, boost_q_t *xDnRecv,
-           boost_q_t *yUpRecv, boost_q_t *yDnRecv) {
+           boost_q_t *yUpRecv, boost_q_t *yDnRecv
 #elif VL
            vlendpt_t *xUpSend, vlendpt_t *xDnSend, vlendpt_t *yUpSend,
            vlendpt_t *yDnSend, vlendpt_t *xUpRecv, vlendpt_t *xDnRecv,
-           vlendpt_t *yUpRecv, vlendpt_t *yDnRecv) {
+           vlendpt_t *yUpRecv, vlendpt_t *yDnRecv
 #endif
+           ) {
 
   int i;
 #ifdef BOOST
@@ -389,16 +390,17 @@ void halo(const int xUp, const int xDn, const int yUp, const int yDn,
           double *yRecvBuffer, double *ySendBuffer,
 #ifdef ZMQ
           void *xUpSend, void *xDnSend, void *yUpSend, void *yDnSend,
-          void *xUpRecv, void *xDnRecv, void *yUpRecv, void *yDnRecv) {
+          void *xUpRecv, void *xDnRecv, void *yUpRecv, void *yDnRecv
 #elif BOOST
           boost_q_t *xUpSend, boost_q_t *xDnSend, boost_q_t *yUpSend,
           boost_q_t *yDnSend, boost_q_t *xUpRecv, boost_q_t *xDnRecv,
-          boost_q_t *yUpRecv, boost_q_t *yDnRecv) {
+          boost_q_t *yUpRecv, boost_q_t *yDnRecv
 #elif VL
           vlendpt_t *xUpSend, vlendpt_t *xDnSend, vlendpt_t *yUpSend,
           vlendpt_t *yDnSend, vlendpt_t *xUpRecv, vlendpt_t *xDnRecv,
-          vlendpt_t *yUpRecv, vlendpt_t *yDnRecv) {
+          vlendpt_t *yUpRecv, vlendpt_t *yDnRecv
 #endif
+          ) {
 
   int i;
 #ifdef BOOST
@@ -548,11 +550,101 @@ void halo(const int xUp, const int xDn, const int yUp, const int yDn,
   }
 }
 
+void incast(const bool isMaster, double *buffer,
+#ifdef ZMQ
+            void *queue
+#elif BOOST
+            boost_q_t *queue
+#elif VL
+            vlendpt_t *queue
+#endif
+            ) {
+  int i, j;
+#ifdef BOOST
+  const int ndoubles = msgSz / sizeof(double);
+  uint16_t idx;
+#elif VL
+  const int nblks = (msgSz + 55) / 56;
+  char buf[64];
+  uint16_t *blkId = (uint16_t*)buf; /* used to reorder cache blocks */
+  uint16_t idx;
+  size_t cnt;
+#endif
+  for (i = 0; repeats > i; ++i) {
+    compute(sleep_nsec);
+
+    if (isMaster) {
+      for (j = nthreads - 1; 0 < j; --j) {
+#ifdef ZMQ
+        assert(msgSz == zmq_recv(queue, (void*)buffer, msgSz, 0));
+#elif BOOST
+        for (idx = 0; ndoubles > idx; ++idx) {
+          while (!queue->pop(buffer[idx]));
+        }
+#elif VL
+        for (idx = 0; nblks > idx; ++idx) {
+          line_vl_pop_weak(queue, (uint8_t*)buf, &cnt);
+          memcpy((void*)&buffer[7*(*blkId)],
+                 (void*)&buf[sizeof(uint16_t)],
+                 ((nblks - 1) > *blkId ? 7 : nblks % 7) *sizeof(double));
+        }
+#endif
+      }
+    } else {
+#ifdef ZMQ
+      assert(msgSz == zmq_send(queue, (void*)buffer, msgSz, 0));
+#elif BOOST
+      for (idx = 0; ndoubles > idx; ++idx) {
+        while (!queue->push(buffer[idx]));
+      }
+#elif VL
+      for (idx = 0; nblks > idx; ++idx) {
+        *blkId = idx;
+        cnt = ((nblks - 1) > idx ? 7 : nblks % 7) * sizeof(double);
+        memcpy((void*)&buf[sizeof(uint16_t)], (void*)&buffer[7*idx], cnt);
+        line_vl_push_strong(queue, (uint8_t*)buf, cnt + sizeof(uint16_t));
+      }
+#endif
+    }
+  }
+}
+
 void *worker(void *arg) {
   int *pid = (int*) arg;
+  setAffinity(*pid);
+
+#ifdef EMBER_INCAST
+  bool isMaster = (0 == *pid);
+  double *buffer;
+  if (isMaster) {
+    buffer = (double*)malloc(nthreads * msgSz);
+  } else {
+    buffer = (double*)malloc(msgSz);
+  }
+#ifdef ZMQ
+  void *queue;
+  if (isMaster) {
+    queue = zmq_socket(ctx, ZMQ_PULL);
+    assert(0 == zmq_bind(queue, "inproc://0"));
+  } else {
+    queue = zmq_socket(ctx, ZMQ_PUSH);
+    assert(0 == zmq_connect(queue, "inproc://0"));
+  }
+#elif BOOST
+  boost_q_t *queue = boost_queues[0];
+#elif VL
+  vlendpt_t endpt;
+  vlendpt_t *queue = &endpt;
+  if (isMaster) {
+    open_byte_vl_as_consumer(1, queue, 1);
+  } else {
+    open_byte_vl_as_producer(1, queue, 1);
+  }
+#endif
+#else /* NOT EMBER_INCAST */
   int x, y, xUp, xDn, yUp, yDn;
   int xUpRx, xUpTx, xDnRx, xDnTx, yUpRx, yUpTx, yDnRx, yDnTx;
-  setAffinity(*pid);
+
   get_position(*pid, pex, pey, &x, &y);
   get_neighbor(*pid, pex, pey, x, y, &xUp, &xDn, &yUp, &yDn);
   get_queue_id(x, y, pex, pey, &xUpRx, &xUpTx, &xDnRx, &xDnTx,
@@ -570,9 +662,7 @@ void *worker(void *arg) {
   void *xDnRecv = zmq_socket(ctx, ZMQ_PULL);
   void *yUpRecv = zmq_socket(ctx, ZMQ_PULL);
   void *yDnRecv = zmq_socket(ctx, ZMQ_PULL);
-  zmq_msg_t msg;
   char queue_str[64];
-  assert(0 == zmq_msg_init_size(&msg, msgSz));
   if (-1 < xUp) {
     sprintf(queue_str, "inproc://%d", xUpTx);
     assert(0 == zmq_bind(xUpSend, queue_str));
@@ -651,10 +741,14 @@ void *worker(void *arg) {
   }
 #endif
 
+#endif /* EMBER_INCAST */
+
   ready++;
   while( nthreads != ready ){ /** spin **/ };
 
-#ifdef EMBER_SWEEP2D
+#ifdef EMBER_INCAST
+  incast(isMaster, buffer, queue);
+#elif EMBER_SWEEP2D
   sweep(xUp, xDn, yUp, yDn, xRecvBuffer, xSendBuffer, yRecvBuffer, ySendBuffer,
        xUpSend, xDnSend, yUpSend, yDnSend, xUpRecv, xDnRecv, yUpRecv, yDnRecv);
 #elif EMBER_HALO2D
@@ -663,6 +757,17 @@ void *worker(void *arg) {
 #endif
 
   /* comment out on purpose to exclude this from ROI.
+#ifdef EMBER_INCAST
+#ifdef ZMQ
+  assert(0 == zmq_close(queue));
+#elif VL
+  if (isMaster) {
+    close_byte_vl_as_consumer(queue);
+  } else {
+    close_byte_vl_as_producer(queue);
+  }
+#endif
+#else
 #ifdef ZMQ
   assert(0 == zmq_close(xUpSend));
   assert(0 == zmq_close(xUpRecv));
@@ -729,6 +834,21 @@ int main(int argc, char* argv[]) {
   printf("Iterations:           %5d\n", repeats);
   nthreads = pex * pey;
   ready = -1;
+
+#ifdef EMBER_INCAST
+
+#ifdef ZMQ
+  ctx = zmq_ctx_new();
+  assert(ctx);
+#elif BOOST
+  boost_queues.resize(1);
+  boost_queues[0] = new boost_q_t(msgSz / sizeof(double));
+#elif VL
+  mkvl(0);
+#endif
+
+#else /* NOT EMBER_INCAST */
+
 #ifdef ZMQ
   ctx = zmq_ctx_new();
   assert(ctx);
@@ -742,6 +862,9 @@ int main(int argc, char* argv[]) {
     mkvl(0);
   }
 #endif
+
+#endif /* EMBER_INCAST */
+
   pthread_t threads[nthreads];
   int ids[nthreads];
   for (i = 0; nthreads > i; ++i) {

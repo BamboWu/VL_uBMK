@@ -23,6 +23,13 @@ using std::chrono::nanoseconds;
 #include <zmq.h>
 #endif
 
+#ifdef BOOST
+#include <vector>
+#include <boost/lockfree/queue.hpp>
+using boost_q_t = boost::lockfree::queue<double>;
+std::vector<boost_q_t*> boost_queues;
+#endif
+
 #ifndef NOGEM5
 #include "gem5/m5ops.h"
 #endif
@@ -58,11 +65,11 @@ void get_queue_id(const int x, const int y, const int pex, const int pey,
   *yDnTx = *yDnRx + tmp;
 }
 
-void compute(long sleep) {
+void compute(long sleep_nsec) {
   struct timespec sleepTS;
   struct timespec remainTS;
   sleepTS.tv_sec = 0;
-  sleepTS.tv_nsec = sleep;
+  sleepTS.tv_nsec = sleep_nsec;
   if (EINTR == nanosleep(&sleepTS, &remainTS)) {
     while (EINTR == nanosleep(&remainTS, &remainTS));
   }
@@ -72,7 +79,7 @@ void compute(long sleep) {
 int pex, pey, nthreads;
 int repeats;
 int msgSz;
-long sleep;
+long sleep_nsec;
 std::atomic< int > ready;
 #ifdef ZMQ
 void *ctx;
@@ -84,6 +91,10 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
 #ifdef ZMQ
            void *xUpSend, void *xDnSend, void *yUpSend, void *yDnSend,
            void *xUpRecv, void *xDnRecv, void *yUpRecv, void *yDnRecv) {
+#elif BOOST
+           boost_q_t *xUpSend, boost_q_t *xDnSend, boost_q_t *yUpSend,
+           boost_q_t *yDnSend, boost_q_t *xUpRecv, boost_q_t *xDnRecv,
+           boost_q_t *yUpRecv, boost_q_t *yDnRecv) {
 #elif VL
            vlendpt_t *xUpSend, vlendpt_t *xDnSend, vlendpt_t *yUpSend,
            vlendpt_t *yDnSend, vlendpt_t *xUpRecv, vlendpt_t *xDnRecv,
@@ -91,7 +102,10 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
 #endif
 
   int i;
-#ifdef VL
+#ifdef BOOST
+  const int ndoubles = msgSz / sizeof(double);
+  uint16_t idx;
+#elif VL
   const int nblks = (msgSz + 55) / 56;
   char buf[64];
   uint16_t *blkId = (uint16_t*)buf; /* used to reorder cache blocks */
@@ -103,6 +117,10 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
     if (-1 < xDn) {
 #ifdef ZMQ
       assert(msgSz == zmq_recv(xDnRecv, (void*)xRecvBuffer, msgSz, 0));
+#elif BOOST
+      for (idx = 0; ndoubles > idx; ++idx) {
+        while (!xDnRecv->pop(xRecvBuffer[idx]));
+      }
 #elif VL
       for (idx = 0; nblks > idx; ++idx) {
         line_vl_pop_weak(xDnRecv, (uint8_t*)buf, &cnt);
@@ -115,6 +133,10 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
     if (-1 < yDn) {
 #ifdef ZMQ
       assert(msgSz == zmq_recv(yDnRecv, (void*)yRecvBuffer, msgSz, 0));
+#elif BOOST
+      for (idx = 0; ndoubles > idx; ++idx) {
+        while (!yDnRecv->pop(yRecvBuffer[idx]));
+      }
 #elif VL
       for (idx = 0; nblks > idx; ++idx) {
         line_vl_pop_weak(yDnRecv, (uint8_t*)buf, &cnt);
@@ -124,10 +146,14 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
       }
 #endif
     }
-    compute(sleep);
+    compute(sleep_nsec);
     if (-1 < xUp) {
 #ifdef ZMQ
       assert(msgSz == zmq_send(xUpSend, (void*)xSendBuffer, msgSz, 0));
+#elif BOOST
+      for (idx = 0; ndoubles > idx; ++idx) {
+        while (!xUpSend->push(xSendBuffer[idx]));
+      }
 #elif VL
       for (idx = 0; nblks > idx; ++idx) {
         *blkId = idx;
@@ -140,6 +166,10 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
     if (-1 < yUp) {
 #ifdef ZMQ
       assert(msgSz == zmq_send(yUpSend, (void*)ySendBuffer, msgSz, 0));
+#elif BOOST
+      for (idx = 0; ndoubles > idx; ++idx) {
+        while (!yUpSend->push(ySendBuffer[idx]));
+      }
 #elif VL
       for (idx = 0; nblks > idx; ++idx) {
         *blkId = idx;
@@ -154,6 +184,10 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
     if (-1 < xUp) {
 #ifdef ZMQ
       assert(msgSz == zmq_recv(xUpRecv, (void*)xRecvBuffer, msgSz, 0));
+#elif BOOST
+      for (idx = 0; ndoubles > idx; ++idx) {
+        while (!xUpRecv->pop(xRecvBuffer[idx]));
+      }
 #elif VL
       for (idx = 0; nblks > idx; ++idx) {
         line_vl_pop_weak(xUpRecv, (uint8_t*)buf, &cnt);
@@ -166,6 +200,10 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
     if (-1 < yDn) {
 #ifdef ZMQ
       assert(msgSz == zmq_recv(yDnRecv, (void*)yRecvBuffer, msgSz, 0));
+#elif BOOST
+      for (idx = 0; ndoubles > idx; ++idx) {
+        while (!yDnRecv->pop(yRecvBuffer[idx]));
+      }
 #elif VL
       for (idx = 0; nblks > idx; ++idx) {
         line_vl_pop_weak(yDnRecv, (uint8_t*)buf, &cnt);
@@ -175,10 +213,14 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
       }
 #endif
     }
-    compute(sleep);
+    compute(sleep_nsec);
     if (-1 < xDn) {
 #ifdef ZMQ
       assert(msgSz == zmq_send(xDnSend, (void*)xSendBuffer, msgSz, 0));
+#elif BOOST
+      for (idx = 0; ndoubles > idx; ++idx) {
+        while (!xDnSend->push(xSendBuffer[idx]));
+      }
 #elif VL
       for (idx = 0; nblks > idx; ++idx) {
         *blkId = idx;
@@ -191,6 +233,10 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
     if (-1 < yUp) {
 #ifdef ZMQ
       assert(msgSz == zmq_send(yUpSend, (void*)ySendBuffer, msgSz, 0));
+#elif BOOST
+      for (idx = 0; ndoubles > idx; ++idx) {
+        while (!yUpSend->push(ySendBuffer[idx]));
+      }
 #elif VL
       for (idx = 0; nblks > idx; ++idx) {
         *blkId = idx;
@@ -205,6 +251,10 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
     if (-1 < xUp) {
 #ifdef ZMQ
       assert(msgSz == zmq_recv(xUpRecv, (void*)xRecvBuffer, msgSz, 0));
+#elif BOOST
+      for (idx = 0; ndoubles > idx; ++idx) {
+        while (!xUpRecv->pop(xRecvBuffer[idx]));
+      }
 #elif VL
       for (idx = 0; nblks > idx; ++idx) {
         line_vl_pop_weak(xUpRecv, (uint8_t*)buf, &cnt);
@@ -217,6 +267,10 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
     if (-1 < yUp) {
 #ifdef ZMQ
       assert(msgSz == zmq_recv(yUpRecv, (void*)yRecvBuffer, msgSz, 0));
+#elif BOOST
+      for (idx = 0; ndoubles > idx; ++idx) {
+        while (!yUpRecv->pop(yRecvBuffer[idx]));
+      }
 #elif VL
       for (idx = 0; nblks > idx; ++idx) {
         line_vl_pop_weak(yUpRecv, (uint8_t*)buf, &cnt);
@@ -226,10 +280,14 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
       }
 #endif
     }
-    compute(sleep);
+    compute(sleep_nsec);
     if (-1 < xDn) {
 #ifdef ZMQ
       assert(msgSz == zmq_send(xDnSend, (void*)xSendBuffer, msgSz, 0));
+#elif BOOST
+      for (idx = 0; ndoubles > idx; ++idx) {
+        while (!xDnSend->push(xSendBuffer[idx]));
+      }
 #elif VL
       for (idx = 0; nblks > idx; ++idx) {
         *blkId = idx;
@@ -242,6 +300,10 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
     if (-1 < yDn) {
 #ifdef ZMQ
       assert(msgSz == zmq_send(yDnSend, (void*)ySendBuffer, msgSz, 0));
+#elif BOOST
+      for (idx = 0; ndoubles > idx; ++idx) {
+        while (!yDnSend->push(ySendBuffer[idx]));
+      }
 #elif VL
       for (idx = 0; nblks > idx; ++idx) {
         *blkId = idx;
@@ -256,6 +318,10 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
     if (-1 < xDn) {
 #ifdef ZMQ
       assert(msgSz == zmq_recv(xDnRecv, (void*)xRecvBuffer, msgSz, 0));
+#elif BOOST
+      for (idx = 0; ndoubles > idx; ++idx) {
+        while (!xDnRecv->pop(xRecvBuffer[idx]));
+      }
 #elif VL
       for (idx = 0; nblks > idx; ++idx) {
         line_vl_pop_weak(xDnRecv, (uint8_t*)buf, &cnt);
@@ -268,6 +334,10 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
     if (-1 < yUp) {
 #ifdef ZMQ
       assert(msgSz == zmq_recv(yUpRecv, (void*)yRecvBuffer, msgSz, 0));
+#elif BOOST
+      for (idx = 0; ndoubles > idx; ++idx) {
+        while (!yUpRecv->pop(yRecvBuffer[idx]));
+      }
 #elif VL
       for (idx = 0; nblks > idx; ++idx) {
         line_vl_pop_weak(yUpRecv, (uint8_t*)buf, &cnt);
@@ -277,10 +347,14 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
       }
 #endif
     }
-    compute(sleep);
+    compute(sleep_nsec);
     if (-1 < xUp) {
 #ifdef ZMQ
       assert(msgSz == zmq_send(xUpSend, (void*)xSendBuffer, msgSz, 0));
+#elif BOOST
+      for (idx = 0; ndoubles > idx; ++idx) {
+        while (!xUpSend->push(xSendBuffer[idx]));
+      }
 #elif VL
       for (idx = 0; nblks > idx; ++idx) {
         *blkId = idx;
@@ -293,6 +367,10 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
     if (-1 < yDn) {
 #ifdef ZMQ
       assert(msgSz == zmq_send(yDnSend, (void*)ySendBuffer, msgSz, 0));
+#elif BOOST
+      for (idx = 0; ndoubles > idx; ++idx) {
+        while (!yDnSend->push(ySendBuffer[idx]));
+      }
 #elif VL
       for (idx = 0; nblks > idx; ++idx) {
         *blkId = idx;
@@ -312,6 +390,10 @@ void halo(const int xUp, const int xDn, const int yUp, const int yDn,
 #ifdef ZMQ
           void *xUpSend, void *xDnSend, void *yUpSend, void *yDnSend,
           void *xUpRecv, void *xDnRecv, void *yUpRecv, void *yDnRecv) {
+#elif BOOST
+          boost_q_t *xUpSend, boost_q_t *xDnSend, boost_q_t *yUpSend,
+          boost_q_t *yDnSend, boost_q_t *xUpRecv, boost_q_t *xDnRecv,
+          boost_q_t *yUpRecv, boost_q_t *yDnRecv) {
 #elif VL
           vlendpt_t *xUpSend, vlendpt_t *xDnSend, vlendpt_t *yUpSend,
           vlendpt_t *yDnSend, vlendpt_t *xUpRecv, vlendpt_t *xDnRecv,
@@ -319,7 +401,10 @@ void halo(const int xUp, const int xDn, const int yUp, const int yDn,
 #endif
 
   int i;
-#if VL
+#ifdef BOOST
+  const int ndoubles = msgSz / sizeof(double);
+  uint16_t idx;
+#elif VL
   const int nblks = (msgSz + 55) / 56;
   char buf[64];
   uint16_t *blkId = (uint16_t*)buf; /* used to reorder cache blocks */
@@ -327,12 +412,16 @@ void halo(const int xUp, const int xDn, const int yUp, const int yDn,
   size_t cnt;
 #endif
   for (i = 0; repeats > i; ++i) {
-    compute(sleep);
+    compute(sleep_nsec);
 
     /* send to four neighbours */
     if (-1 < xUp) {
 #ifdef ZMQ
       assert(msgSz == zmq_send(xUpSend, (void*)xSendBuffer, msgSz, 0));
+#elif BOOST
+      for (idx = 0; ndoubles > idx; ++idx) {
+        while (!xUpSend->push(xSendBuffer[idx]));
+      }
 #elif VL
       for (idx = 0; nblks > idx; ++idx) {
         *blkId = idx;
@@ -345,6 +434,10 @@ void halo(const int xUp, const int xDn, const int yUp, const int yDn,
     if (-1 < xDn) {
 #ifdef ZMQ
       assert(msgSz == zmq_send(xDnSend, (void*)xSendBuffer, msgSz, 0));
+#elif BOOST
+      for (idx = 0; ndoubles > idx; ++idx) {
+        while (!xDnSend->push(xSendBuffer[idx]));
+      }
 #elif VL
       for (idx = 0; nblks > idx; ++idx) {
         *blkId = idx;
@@ -357,6 +450,10 @@ void halo(const int xUp, const int xDn, const int yUp, const int yDn,
     if (-1 < yUp) {
 #ifdef ZMQ
       assert(msgSz == zmq_send(yUpSend, (void*)ySendBuffer, msgSz, 0));
+#elif BOOST
+      for (idx = 0; ndoubles > idx; ++idx) {
+        while (!yUpSend->push(ySendBuffer[idx]));
+      }
 #elif VL
       for (idx = 0; nblks > idx; ++idx) {
         *blkId = idx;
@@ -369,6 +466,10 @@ void halo(const int xUp, const int xDn, const int yUp, const int yDn,
     if (-1 < yDn) {
 #ifdef ZMQ
       assert(msgSz == zmq_send(yDnSend, (void*)ySendBuffer, msgSz, 0));
+#elif BOOST
+      for (idx = 0; ndoubles > idx; ++idx) {
+        while (!yDnSend->push(ySendBuffer[idx]));
+      }
 #elif VL
       for (idx = 0; nblks > idx; ++idx) {
         *blkId = idx;
@@ -383,6 +484,10 @@ void halo(const int xUp, const int xDn, const int yUp, const int yDn,
     if (-1 < xUp) {
 #ifdef ZMQ
       assert(msgSz == zmq_recv(xUpRecv, (void*)xRecvBuffer, msgSz, 0));
+#elif BOOST
+      for (idx = 0; ndoubles > idx; ++idx) {
+        while (!xUpRecv->pop(xRecvBuffer[idx]));
+      }
 #elif VL
       for (idx = 0; nblks > idx; ++idx) {
         line_vl_pop_weak(xUpRecv, (uint8_t*)buf, &cnt);
@@ -395,6 +500,10 @@ void halo(const int xUp, const int xDn, const int yUp, const int yDn,
     if (-1 < xDn) {
 #ifdef ZMQ
       assert(msgSz == zmq_recv(xDnRecv, (void*)xRecvBuffer, msgSz, 0));
+#elif BOOST
+      for (idx = 0; ndoubles > idx; ++idx) {
+        while (!xDnRecv->pop(xRecvBuffer[idx]));
+      }
 #elif VL
       for (idx = 0; nblks > idx; ++idx) {
         line_vl_pop_weak(xDnRecv, (uint8_t*)buf, &cnt);
@@ -407,6 +516,10 @@ void halo(const int xUp, const int xDn, const int yUp, const int yDn,
     if (-1 < yUp) {
 #ifdef ZMQ
       assert(msgSz == zmq_recv(yUpRecv, (void*)yRecvBuffer, msgSz, 0));
+#elif BOOST
+      for (idx = 0; ndoubles > idx; ++idx) {
+        while (!yUpRecv->pop(yRecvBuffer[idx]));
+      }
 #elif VL
       for (idx = 0; nblks > idx; ++idx) {
         line_vl_pop_weak(yUpRecv, (uint8_t*)buf, &cnt);
@@ -419,6 +532,10 @@ void halo(const int xUp, const int xDn, const int yUp, const int yDn,
     if (-1 < yDn) {
 #ifdef ZMQ
       assert(msgSz == zmq_recv(yDnRecv, (void*)yRecvBuffer, msgSz, 0));
+#elif BOOST
+      for (idx = 0; ndoubles > idx; ++idx) {
+        while (!yDnRecv->pop(yRecvBuffer[idx]));
+      }
 #elif VL
       for (idx = 0; nblks > idx; ++idx) {
         line_vl_pop_weak(yDnRecv, (uint8_t*)buf, &cnt);
@@ -479,6 +596,32 @@ void *worker(void *arg) {
     assert(0 == zmq_bind(yDnSend, queue_str));
     sprintf(queue_str, "inproc://%d", yDnRx);
     assert(0 == zmq_connect(yDnRecv, queue_str));
+  }
+#elif BOOST
+  boost_q_t *xUpSend = nullptr;
+  boost_q_t *xUpRecv = nullptr;
+  boost_q_t *xDnSend = nullptr;
+  boost_q_t *xDnRecv = nullptr;
+  boost_q_t *yUpSend = nullptr;
+  boost_q_t *yUpRecv = nullptr;
+  boost_q_t *yDnSend = nullptr;
+  boost_q_t *yDnRecv = nullptr;
+
+  if (-1 < xUp) {
+    xUpSend = boost_queues[xUpTx];
+    xUpRecv = boost_queues[xUpRx];
+  }
+  if (-1 < xDn) {
+    xDnSend = boost_queues[xDnTx];
+    xDnRecv = boost_queues[xDnRx];
+  }
+  if (-1 < yUp) {
+    yUpSend = boost_queues[yUpTx];
+    yUpRecv = boost_queues[yUpRx];
+  }
+  if (-1 < yDn) {
+    yDnSend = boost_queues[yDnTx];
+    yDnRecv = boost_queues[yDnRx];
   }
 #elif VL
   vlendpt_t endpts[8];
@@ -562,7 +705,7 @@ int main(int argc, char* argv[]) {
   pex = pey = 2; /* default values */
   repeats = 7;
   msgSz = 7 * sizeof(double);
-  sleep = 1000;
+  sleep_nsec = 1000;
   for (i = 0; argc > i; ++i) {
     if (0 == strcmp("-pex", argv[i])) {
       pex = atoi(argv[i + 1]);
@@ -574,7 +717,7 @@ int main(int argc, char* argv[]) {
       repeats = atoi(argv[i + 1]);
       ++i;
     } else if (0 == strcmp("-sleep", argv[i])) {
-      sleep = atol(argv[i + 1]);
+      sleep_nsec = atol(argv[i + 1]);
       ++i;
     } else if (0 == strcmp("-msgSz", argv[i])) {
       msgSz = atoi(argv[i + 1]);
@@ -589,6 +732,11 @@ int main(int argc, char* argv[]) {
 #ifdef ZMQ
   ctx = zmq_ctx_new();
   assert(ctx);
+#elif BOOST
+  boost_queues.resize(pex * pey * 4 - (pex + pey) * 2 + 1);
+  for (i = 0; (pex * pey * 4) - (pex + pey) * 2 >= i; ++i) {
+    boost_queues[i] = new boost_q_t(msgSz / sizeof(double));
+  }
 #elif VL
   for (i = 0; (pex * pey * 4) - (pex + pey) * 2 > i; ++i) {
     mkvl(0);

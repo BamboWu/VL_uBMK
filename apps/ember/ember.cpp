@@ -114,6 +114,14 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
   size_t cnt;
 #endif
   for (i = 0; repeats > i; ++i) {
+
+#if VL
+    for (idx = 0; nblks > idx; ++idx) { /* } */
+      /* vl has to break a message to fit into cacheline
+       * and this loop cannot be inside, otherwise all producers goes first,
+       * and it would overwhelm routing device producer buffer */
+#endif
+
     /* Sweep from (0,0) to (Px,Py) */
     if (-1 < xDn) {
 #ifdef ZMQ
@@ -123,12 +131,10 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
         while (!xDnRecv->pop(xRecvBuffer[idx]));
       }
 #elif VL
-      for (idx = 0; nblks > idx; ++idx) {
-        line_vl_pop_weak(xDnRecv, (uint8_t*)buf, &cnt);
-        memcpy((void*)&xRecvBuffer[7*(*blkId)],
-               (void*)&buf[sizeof(uint16_t)],
-               ((nblks - 1) > *blkId ? 7 : nblks % 7) *sizeof(double));
-      }
+      line_vl_pop_weak(xDnRecv, (uint8_t*)buf, &cnt);
+      memcpy((void*)&xRecvBuffer[7*(*blkId)],
+             (void*)&buf[sizeof(uint16_t)],
+             ((nblks - 1) > *blkId ? 7 : nblks % 7) *sizeof(double));
 #endif
     }
     if (-1 < yDn) {
@@ -139,15 +145,21 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
         while (!yDnRecv->pop(yRecvBuffer[idx]));
       }
 #elif VL
-      for (idx = 0; nblks > idx; ++idx) {
-        line_vl_pop_weak(yDnRecv, (uint8_t*)buf, &cnt);
-        memcpy((void*)&yRecvBuffer[7*(*blkId)],
-               (void*)&buf[sizeof(uint16_t)],
-               ((nblks - 1) > *blkId ? 7 : nblks % 7) *sizeof(double));
-      }
+      line_vl_pop_weak(yDnRecv, (uint8_t*)buf, &cnt);
+      memcpy((void*)&yRecvBuffer[7*(*blkId)],
+             (void*)&buf[sizeof(uint16_t)],
+             ((nblks - 1) > *blkId ? 7 : nblks % 7) *sizeof(double));
 #endif
     }
+
+#ifdef VL
+    if (0 == idx) { /* only compute with completed messages */
+#endif
     compute(sleep_nsec);
+#ifdef VL
+    }
+#endif
+
     if (-1 < xUp) {
 #ifdef ZMQ
       assert(msgSz == zmq_send(xUpSend, (void*)xSendBuffer, msgSz, 0));
@@ -156,12 +168,10 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
         while (!xUpSend->push(xSendBuffer[idx]));
       }
 #elif VL
-      for (idx = 0; nblks > idx; ++idx) {
-        *blkId = idx;
-        cnt = ((nblks - 1) > idx ? 7 : nblks % 7) * sizeof(double);
-        memcpy((void*)&buf[sizeof(uint16_t)], (void*)&xSendBuffer[7*idx], cnt);
-        line_vl_push_strong(xUpSend, (uint8_t*)buf, cnt + sizeof(uint16_t));
-      }
+      *blkId = idx;
+      cnt = ((nblks - 1) > idx ? 7 : nblks % 7) * sizeof(double);
+      memcpy((void*)&buf[sizeof(uint16_t)], (void*)&xSendBuffer[7*idx], cnt);
+      line_vl_push_strong(xUpSend, (uint8_t*)buf, cnt + sizeof(uint16_t));
 #endif
     }
     if (-1 < yUp) {
@@ -172,12 +182,10 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
         while (!yUpSend->push(ySendBuffer[idx]));
       }
 #elif VL
-      for (idx = 0; nblks > idx; ++idx) {
-        *blkId = idx;
-        cnt = ((nblks - 1) > idx ? 7 : nblks % 7) * sizeof(double);
-        memcpy((void*)&buf[sizeof(uint16_t)], (void*)&ySendBuffer[7*idx], cnt);
-        line_vl_push_strong(yUpSend, (uint8_t*)buf, cnt + sizeof(uint16_t));
-      }
+      *blkId = idx;
+      cnt = ((nblks - 1) > idx ? 7 : nblks % 7) * sizeof(double);
+      memcpy((void*)&buf[sizeof(uint16_t)], (void*)&ySendBuffer[7*idx], cnt);
+      line_vl_push_strong(yUpSend, (uint8_t*)buf, cnt + sizeof(uint16_t));
 #endif
     }
 
@@ -190,12 +198,10 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
         while (!xUpRecv->pop(xRecvBuffer[idx]));
       }
 #elif VL
-      for (idx = 0; nblks > idx; ++idx) {
-        line_vl_pop_weak(xUpRecv, (uint8_t*)buf, &cnt);
-        memcpy((void*)&xRecvBuffer[7*(*blkId)],
-               (void*)&buf[sizeof(uint16_t)],
-               ((nblks - 1) > *blkId ? 7 : nblks % 7) *sizeof(double));
-      }
+      line_vl_pop_weak(xUpRecv, (uint8_t*)buf, &cnt);
+      memcpy((void*)&xRecvBuffer[7*(*blkId)],
+             (void*)&buf[sizeof(uint16_t)],
+             ((nblks - 1) > *blkId ? 7 : nblks % 7) *sizeof(double));
 #endif
     }
     if (-1 < yDn) {
@@ -206,15 +212,21 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
         while (!yDnRecv->pop(yRecvBuffer[idx]));
       }
 #elif VL
-      for (idx = 0; nblks > idx; ++idx) {
-        line_vl_pop_weak(yDnRecv, (uint8_t*)buf, &cnt);
-        memcpy((void*)&yRecvBuffer[7*(*blkId)],
-               (void*)&buf[sizeof(uint16_t)],
-               ((nblks - 1) > *blkId ? 7 : nblks % 7) *sizeof(double));
-      }
+      line_vl_pop_weak(yDnRecv, (uint8_t*)buf, &cnt);
+      memcpy((void*)&yRecvBuffer[7*(*blkId)],
+             (void*)&buf[sizeof(uint16_t)],
+             ((nblks - 1) > *blkId ? 7 : nblks % 7) *sizeof(double));
 #endif
     }
+
+#ifdef VL
+    if (0 == idx) { /* only compute with completed messages */
+#endif
     compute(sleep_nsec);
+#ifdef VL
+    }
+#endif
+
     if (-1 < xDn) {
 #ifdef ZMQ
       assert(msgSz == zmq_send(xDnSend, (void*)xSendBuffer, msgSz, 0));
@@ -223,12 +235,10 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
         while (!xDnSend->push(xSendBuffer[idx]));
       }
 #elif VL
-      for (idx = 0; nblks > idx; ++idx) {
-        *blkId = idx;
-        cnt = ((nblks - 1) > idx ? 7 : nblks % 7) * sizeof(double);
-        memcpy((void*)&buf[sizeof(uint16_t)], (void*)&xSendBuffer[7*idx], cnt);
-        line_vl_push_strong(xDnSend, (uint8_t*)buf, cnt + sizeof(uint16_t));
-      }
+      *blkId = idx;
+      cnt = ((nblks - 1) > idx ? 7 : nblks % 7) * sizeof(double);
+      memcpy((void*)&buf[sizeof(uint16_t)], (void*)&xSendBuffer[7*idx], cnt);
+      line_vl_push_strong(xDnSend, (uint8_t*)buf, cnt + sizeof(uint16_t));
 #endif
     }
     if (-1 < yUp) {
@@ -239,12 +249,10 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
         while (!yUpSend->push(ySendBuffer[idx]));
       }
 #elif VL
-      for (idx = 0; nblks > idx; ++idx) {
-        *blkId = idx;
-        cnt = ((nblks - 1) > idx ? 7 : nblks % 7) * sizeof(double);
-        memcpy((void*)&buf[sizeof(uint16_t)], (void*)&ySendBuffer[7*idx], cnt);
-        line_vl_push_strong(yUpSend, (uint8_t*)buf, cnt + sizeof(uint16_t));
-      }
+      *blkId = idx;
+      cnt = ((nblks - 1) > idx ? 7 : nblks % 7) * sizeof(double);
+      memcpy((void*)&buf[sizeof(uint16_t)], (void*)&ySendBuffer[7*idx], cnt);
+      line_vl_push_strong(yUpSend, (uint8_t*)buf, cnt + sizeof(uint16_t));
 #endif
     }
 
@@ -257,12 +265,10 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
         while (!xUpRecv->pop(xRecvBuffer[idx]));
       }
 #elif VL
-      for (idx = 0; nblks > idx; ++idx) {
-        line_vl_pop_weak(xUpRecv, (uint8_t*)buf, &cnt);
-        memcpy((void*)&xRecvBuffer[7*(*blkId)],
-               (void*)&buf[sizeof(uint16_t)],
-               ((nblks - 1) > *blkId ? 7 : nblks % 7) *sizeof(double));
-      }
+      line_vl_pop_weak(xUpRecv, (uint8_t*)buf, &cnt);
+      memcpy((void*)&xRecvBuffer[7*(*blkId)],
+             (void*)&buf[sizeof(uint16_t)],
+             ((nblks - 1) > *blkId ? 7 : nblks % 7) *sizeof(double));
 #endif
     }
     if (-1 < yUp) {
@@ -273,15 +279,21 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
         while (!yUpRecv->pop(yRecvBuffer[idx]));
       }
 #elif VL
-      for (idx = 0; nblks > idx; ++idx) {
-        line_vl_pop_weak(yUpRecv, (uint8_t*)buf, &cnt);
-        memcpy((void*)&yRecvBuffer[7*(*blkId)],
-               (void*)&buf[sizeof(uint16_t)],
-               ((nblks - 1) > *blkId ? 7 : nblks % 7) *sizeof(double));
-      }
+      line_vl_pop_weak(yUpRecv, (uint8_t*)buf, &cnt);
+      memcpy((void*)&yRecvBuffer[7*(*blkId)],
+             (void*)&buf[sizeof(uint16_t)],
+             ((nblks - 1) > *blkId ? 7 : nblks % 7) *sizeof(double));
 #endif
     }
+
+#ifdef VL
+    if (0 == idx) { /* only compute with completed messages */
+#endif
     compute(sleep_nsec);
+#ifdef VL
+    }
+#endif
+
     if (-1 < xDn) {
 #ifdef ZMQ
       assert(msgSz == zmq_send(xDnSend, (void*)xSendBuffer, msgSz, 0));
@@ -290,12 +302,10 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
         while (!xDnSend->push(xSendBuffer[idx]));
       }
 #elif VL
-      for (idx = 0; nblks > idx; ++idx) {
-        *blkId = idx;
-        cnt = ((nblks - 1) > idx ? 7 : nblks % 7) * sizeof(double);
-        memcpy((void*)&buf[sizeof(uint16_t)], (void*)&xSendBuffer[7*idx], cnt);
-        line_vl_push_strong(xDnSend, (uint8_t*)buf, cnt + sizeof(uint16_t));
-      }
+      *blkId = idx;
+      cnt = ((nblks - 1) > idx ? 7 : nblks % 7) * sizeof(double);
+      memcpy((void*)&buf[sizeof(uint16_t)], (void*)&xSendBuffer[7*idx], cnt);
+      line_vl_push_strong(xDnSend, (uint8_t*)buf, cnt + sizeof(uint16_t));
 #endif
     }
     if (-1 < yDn) {
@@ -306,12 +316,10 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
         while (!yDnSend->push(ySendBuffer[idx]));
       }
 #elif VL
-      for (idx = 0; nblks > idx; ++idx) {
-        *blkId = idx;
-        cnt = ((nblks - 1) > idx ? 7 : nblks % 7) * sizeof(double);
-        memcpy((void*)&buf[sizeof(uint16_t)], (void*)&ySendBuffer[7*idx], cnt);
-        line_vl_push_strong(yDnSend, (uint8_t*)buf, cnt + sizeof(uint16_t));
-      }
+      *blkId = idx;
+      cnt = ((nblks - 1) > idx ? 7 : nblks % 7) * sizeof(double);
+      memcpy((void*)&buf[sizeof(uint16_t)], (void*)&ySendBuffer[7*idx], cnt);
+      line_vl_push_strong(yDnSend, (uint8_t*)buf, cnt + sizeof(uint16_t));
 #endif
     }
 
@@ -324,12 +332,10 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
         while (!xDnRecv->pop(xRecvBuffer[idx]));
       }
 #elif VL
-      for (idx = 0; nblks > idx; ++idx) {
-        line_vl_pop_weak(xDnRecv, (uint8_t*)buf, &cnt);
-        memcpy((void*)&xRecvBuffer[7*(*blkId)],
-               (void*)&buf[sizeof(uint16_t)],
-               ((nblks - 1) > *blkId ? 7 : nblks % 7) *sizeof(double));
-      }
+      line_vl_pop_weak(xDnRecv, (uint8_t*)buf, &cnt);
+      memcpy((void*)&xRecvBuffer[7*(*blkId)],
+             (void*)&buf[sizeof(uint16_t)],
+             ((nblks - 1) > *blkId ? 7 : nblks % 7) *sizeof(double));
 #endif
     }
     if (-1 < yUp) {
@@ -340,15 +346,21 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
         while (!yUpRecv->pop(yRecvBuffer[idx]));
       }
 #elif VL
-      for (idx = 0; nblks > idx; ++idx) {
-        line_vl_pop_weak(yUpRecv, (uint8_t*)buf, &cnt);
-        memcpy((void*)&yRecvBuffer[7*(*blkId)],
-               (void*)&buf[sizeof(uint16_t)],
-               ((nblks - 1) > *blkId ? 7 : nblks % 7) *sizeof(double));
-      }
+      line_vl_pop_weak(yUpRecv, (uint8_t*)buf, &cnt);
+      memcpy((void*)&yRecvBuffer[7*(*blkId)],
+             (void*)&buf[sizeof(uint16_t)],
+             ((nblks - 1) > *blkId ? 7 : nblks % 7) *sizeof(double));
 #endif
     }
+
+#ifdef VL
+    if (0 == idx) { /* only compute with completed messages */
+#endif
     compute(sleep_nsec);
+#ifdef VL
+    }
+#endif
+
     if (-1 < xUp) {
 #ifdef ZMQ
       assert(msgSz == zmq_send(xUpSend, (void*)xSendBuffer, msgSz, 0));
@@ -357,12 +369,10 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
         while (!xUpSend->push(xSendBuffer[idx]));
       }
 #elif VL
-      for (idx = 0; nblks > idx; ++idx) {
-        *blkId = idx;
-        cnt = ((nblks - 1) > idx ? 7 : nblks % 7) * sizeof(double);
-        memcpy((void*)&buf[sizeof(uint16_t)], (void*)&xSendBuffer[7*idx], cnt);
-        line_vl_push_strong(xUpSend, (uint8_t*)buf, cnt + sizeof(uint16_t));
-      }
+      *blkId = idx;
+      cnt = ((nblks - 1) > idx ? 7 : nblks % 7) * sizeof(double);
+      memcpy((void*)&buf[sizeof(uint16_t)], (void*)&xSendBuffer[7*idx], cnt);
+      line_vl_push_strong(xUpSend, (uint8_t*)buf, cnt + sizeof(uint16_t));
 #endif
     }
     if (-1 < yDn) {
@@ -373,15 +383,17 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
         while (!yDnSend->push(ySendBuffer[idx]));
       }
 #elif VL
-      for (idx = 0; nblks > idx; ++idx) {
-        *blkId = idx;
-        cnt = ((nblks - 1) > idx ? 7 : nblks % 7) * sizeof(double);
-        memcpy((void*)&buf[sizeof(uint16_t)], (void*)&ySendBuffer[7*idx], cnt);
-        line_vl_push_strong(yDnSend, (uint8_t*)buf, cnt + sizeof(uint16_t));
-      }
+      *blkId = idx;
+      cnt = ((nblks - 1) > idx ? 7 : nblks % 7) * sizeof(double);
+      memcpy((void*)&buf[sizeof(uint16_t)], (void*)&ySendBuffer[7*idx], cnt);
+      line_vl_push_strong(yDnSend, (uint8_t*)buf, cnt + sizeof(uint16_t));
 #endif
     }
-  }
+
+#ifdef VL
+    }  /* end of for (idx = 0; nblks > idx; ++idx) */
+#endif
+  } /* end of for (i = 0; repeats > i; ++i) */
 
 }
 
@@ -416,6 +428,10 @@ void halo(const int xUp, const int xDn, const int yUp, const int yDn,
   for (i = 0; repeats > i; ++i) {
     compute(sleep_nsec);
 
+#ifdef VL
+    for (idx = 0; nblks > idx; ++idx) {
+#endif
+
     /* send to four neighbours */
     if (-1 < xUp) {
 #ifdef ZMQ
@@ -425,12 +441,10 @@ void halo(const int xUp, const int xDn, const int yUp, const int yDn,
         while (!xUpSend->push(xSendBuffer[idx]));
       }
 #elif VL
-      for (idx = 0; nblks > idx; ++idx) {
-        *blkId = idx;
-        cnt = ((nblks - 1) > idx ? 7 : nblks % 7) * sizeof(double);
-        memcpy((void*)&buf[sizeof(uint16_t)], (void*)&xSendBuffer[7*idx], cnt);
-        line_vl_push_strong(xUpSend, (uint8_t*)buf, cnt + sizeof(uint16_t));
-      }
+      *blkId = idx;
+      cnt = ((nblks - 1) > idx ? 7 : nblks % 7) * sizeof(double);
+      memcpy((void*)&buf[sizeof(uint16_t)], (void*)&xSendBuffer[7*idx], cnt);
+      line_vl_push_strong(xUpSend, (uint8_t*)buf, cnt + sizeof(uint16_t));
 #endif
     }
     if (-1 < xDn) {
@@ -441,12 +455,10 @@ void halo(const int xUp, const int xDn, const int yUp, const int yDn,
         while (!xDnSend->push(xSendBuffer[idx]));
       }
 #elif VL
-      for (idx = 0; nblks > idx; ++idx) {
-        *blkId = idx;
-        cnt = ((nblks - 1) > idx ? 7 : nblks % 7) * sizeof(double);
-        memcpy((void*)&buf[sizeof(uint16_t)], (void*)&xSendBuffer[7*idx], cnt);
-        line_vl_push_strong(xDnSend, (uint8_t*)buf, cnt + sizeof(uint16_t));
-      }
+      *blkId = idx;
+      cnt = ((nblks - 1) > idx ? 7 : nblks % 7) * sizeof(double);
+      memcpy((void*)&buf[sizeof(uint16_t)], (void*)&xSendBuffer[7*idx], cnt);
+      line_vl_push_strong(xDnSend, (uint8_t*)buf, cnt + sizeof(uint16_t));
 #endif
     }
     if (-1 < yUp) {
@@ -457,12 +469,10 @@ void halo(const int xUp, const int xDn, const int yUp, const int yDn,
         while (!yUpSend->push(ySendBuffer[idx]));
       }
 #elif VL
-      for (idx = 0; nblks > idx; ++idx) {
-        *blkId = idx;
-        cnt = ((nblks - 1) > idx ? 7 : nblks % 7) * sizeof(double);
-        memcpy((void*)&buf[sizeof(uint16_t)], (void*)&ySendBuffer[7*idx], cnt);
-        line_vl_push_strong(yUpSend, (uint8_t*)buf, cnt + sizeof(uint16_t));
-      }
+      *blkId = idx;
+      cnt = ((nblks - 1) > idx ? 7 : nblks % 7) * sizeof(double);
+      memcpy((void*)&buf[sizeof(uint16_t)], (void*)&ySendBuffer[7*idx], cnt);
+      line_vl_push_strong(yUpSend, (uint8_t*)buf, cnt + sizeof(uint16_t));
 #endif
     }
     if (-1 < yDn) {
@@ -473,12 +483,10 @@ void halo(const int xUp, const int xDn, const int yUp, const int yDn,
         while (!yDnSend->push(ySendBuffer[idx]));
       }
 #elif VL
-      for (idx = 0; nblks > idx; ++idx) {
-        *blkId = idx;
-        cnt = ((nblks - 1) > idx ? 7 : nblks % 7) * sizeof(double);
-        memcpy((void*)&buf[sizeof(uint16_t)], (void*)&ySendBuffer[7*idx], cnt);
-        line_vl_push_strong(yDnSend, (uint8_t*)buf, cnt + sizeof(uint16_t));
-      }
+      *blkId = idx;
+      cnt = ((nblks - 1) > idx ? 7 : nblks % 7) * sizeof(double);
+      memcpy((void*)&buf[sizeof(uint16_t)], (void*)&ySendBuffer[7*idx], cnt);
+      line_vl_push_strong(yDnSend, (uint8_t*)buf, cnt + sizeof(uint16_t));
 #endif
     }
 
@@ -491,12 +499,10 @@ void halo(const int xUp, const int xDn, const int yUp, const int yDn,
         while (!xUpRecv->pop(xRecvBuffer[idx]));
       }
 #elif VL
-      for (idx = 0; nblks > idx; ++idx) {
-        line_vl_pop_weak(xUpRecv, (uint8_t*)buf, &cnt);
-        memcpy((void*)&xRecvBuffer[7*(*blkId)],
-               (void*)&buf[sizeof(uint16_t)],
-               ((nblks - 1) > *blkId ? 7 : nblks % 7) *sizeof(double));
-      }
+      line_vl_pop_weak(xUpRecv, (uint8_t*)buf, &cnt);
+      memcpy((void*)&xRecvBuffer[7*(*blkId)],
+             (void*)&buf[sizeof(uint16_t)],
+             ((nblks - 1) > *blkId ? 7 : nblks % 7) *sizeof(double));
 #endif
     }
     if (-1 < xDn) {
@@ -507,12 +513,10 @@ void halo(const int xUp, const int xDn, const int yUp, const int yDn,
         while (!xDnRecv->pop(xRecvBuffer[idx]));
       }
 #elif VL
-      for (idx = 0; nblks > idx; ++idx) {
-        line_vl_pop_weak(xDnRecv, (uint8_t*)buf, &cnt);
-        memcpy((void*)&xRecvBuffer[7*(*blkId)],
-               (void*)&buf[sizeof(uint16_t)],
-               ((nblks - 1) > *blkId ? 7 : nblks % 7) *sizeof(double));
-      }
+      line_vl_pop_weak(xDnRecv, (uint8_t*)buf, &cnt);
+      memcpy((void*)&xRecvBuffer[7*(*blkId)],
+             (void*)&buf[sizeof(uint16_t)],
+             ((nblks - 1) > *blkId ? 7 : nblks % 7) *sizeof(double));
 #endif
     }
     if (-1 < yUp) {
@@ -523,12 +527,10 @@ void halo(const int xUp, const int xDn, const int yUp, const int yDn,
         while (!yUpRecv->pop(yRecvBuffer[idx]));
       }
 #elif VL
-      for (idx = 0; nblks > idx; ++idx) {
-        line_vl_pop_weak(yUpRecv, (uint8_t*)buf, &cnt);
-        memcpy((void*)&yRecvBuffer[7*(*blkId)],
-               (void*)&buf[sizeof(uint16_t)],
-               ((nblks - 1) > *blkId ? 7 : nblks % 7) *sizeof(double));
-      }
+      line_vl_pop_weak(yUpRecv, (uint8_t*)buf, &cnt);
+      memcpy((void*)&yRecvBuffer[7*(*blkId)],
+             (void*)&buf[sizeof(uint16_t)],
+             ((nblks - 1) > *blkId ? 7 : nblks % 7) *sizeof(double));
 #endif
     }
     if (-1 < yDn) {
@@ -539,14 +541,17 @@ void halo(const int xUp, const int xDn, const int yUp, const int yDn,
         while (!yDnRecv->pop(yRecvBuffer[idx]));
       }
 #elif VL
-      for (idx = 0; nblks > idx; ++idx) {
-        line_vl_pop_weak(yDnRecv, (uint8_t*)buf, &cnt);
-        memcpy((void*)&yRecvBuffer[7*(*blkId)],
-               (void*)&buf[sizeof(uint16_t)],
-               ((nblks - 1) > *blkId ? 7 : nblks % 7) *sizeof(double));
-      }
+      line_vl_pop_weak(yDnRecv, (uint8_t*)buf, &cnt);
+      memcpy((void*)&yRecvBuffer[7*(*blkId)],
+             (void*)&buf[sizeof(uint16_t)],
+             ((nblks - 1) > *blkId ? 7 : nblks % 7) *sizeof(double));
 #endif
     }
+
+#ifdef VL
+    } /* endof for (idx = 0; nblks > idx; ++idx) */
+#endif
+
   }
 }
 

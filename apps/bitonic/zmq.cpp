@@ -6,6 +6,7 @@
 #include <limits.h>
 #include <assert.h>
 #include <zmq.h>
+#include <atomic>
 
 #ifndef STDTHREAD
 #include <boost/thread.hpp>
@@ -31,6 +32,8 @@ using boost::thread;
 #else
 using std::thread;
 #endif
+
+std::atomic<int> ready;
 
 union {
   bool done; // to tell other threads we are done, only master thread writes
@@ -64,6 +67,8 @@ void slave(const int desired_core) {
   Message<int> msg;
   const size_t msg_size = sizeof(msg);
   bool done = false;
+  ready++;
+  while ((1 + NUM_SLAVES) != ready) { /** spin **/ };
   while (!done) {
     if(0 < zmq_recv(to_slave_cons, &msg, msg_size, ZMQ_DONTWAIT)) {
       int *arr_tmp = &msg.arr.base[msg.arr.beg];
@@ -114,9 +119,12 @@ void sort(int *arr, const uint64_t len) {
 
   int core_id = 1;
   std::vector<thread> slave_threads;
+  ready = 0;
   for (int i = 0; NUM_SLAVES > i; ++i) {
     slave_threads.push_back(thread(slave, core_id++));
   }
+  ready++;
+  while ((1 + NUM_SLAVES) != ready) { /** spin **/ };
 
   const uint64_t beg_tsc = rdtsc();
   const auto beg(high_resolution_clock::now());

@@ -5,6 +5,7 @@
 #include <malloc.h>
 #include <limits.h>
 #include <assert.h>
+#include <atomic>
 
 #ifndef STDTHREAD
 #include <boost/thread.hpp>
@@ -35,6 +36,7 @@ using std::thread;
 
 int toslave_fd;
 int tomaster_fd;
+std::atomic<int> ready;
 
 union {
   bool done; // to tell other threads we are done, only master thread writes
@@ -69,6 +71,8 @@ void slave(const int desired_core) {
     printf("\033[91mFAILED:\033[0m %s(), tomaster_prod\n", __func__);
     return;
   }
+  ready++;
+  while ((1 + NUM_SLAVES) != ready) { /** spin **/ };
 
   while (!done) {
     twin_vl_pop_non(&toslave_cons, &arr_base, &isvalid);
@@ -141,10 +145,13 @@ void sort(int *arr, const uint64_t len) {
     return;
   }
 
+  ready = 0;
   std::vector<thread> slave_threads;
   for (int i = 0; NUM_SLAVES > i; ++i) {
     slave_threads.push_back(thread(slave, core_id++));
   }
+  ready++;
+  while ((1 + NUM_SLAVES) != ready) { /** spin **/ };
 
   const uint64_t beg_tsc = rdtsc();
   const auto beg(high_resolution_clock::now());

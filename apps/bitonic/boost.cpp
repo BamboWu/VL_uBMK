@@ -6,6 +6,7 @@
 #include <limits.h>
 #include <assert.h>
 #include <boost/lockfree/queue.hpp>
+#include <atomic>
 
 #ifndef STDTHREAD
 #include <boost/thread.hpp>
@@ -34,6 +35,7 @@ using std::thread;
 
 boost::lockfree::queue< Message<int> > to_slave(64);
 boost::lockfree::queue< Message<int> > to_master(64);
+std::atomic<int> ready;
 
 union {
   bool done; // to tell other threads we are done, only master thread writes
@@ -55,6 +57,8 @@ void slave(const int desired_core) {
   setAffinity(desired_core);
   Message<int> msg;
   bool done = false;;
+  ready++;
+  while ((1 + NUM_SLAVES) != ready) { /** spin **/ };
   while (!done) {
     if (to_slave.pop(msg)) {
       int *arr_tmp = &msg.arr.base[msg.arr.beg];
@@ -82,9 +86,12 @@ void sort(int *arr, const uint64_t len) {
   setAffinity(0);
   int core_id = 1;
   std::vector<thread> slave_threads;
+  ready = 0;
   for (int i = 0; NUM_SLAVES > i; ++i) {
     slave_threads.push_back(thread(slave, core_id++));
   }
+  ready++;
+  while ((1 + NUM_SLAVES) != ready) { /** spin **/ };
 
   const uint64_t beg_tsc = rdtsc();
   const auto beg(high_resolution_clock::now());

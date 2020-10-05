@@ -1,0 +1,44 @@
+project(VL_uBMK)
+
+cmake_minimum_required(VERSION 3.1)
+
+if(VL_FOUND)
+  include_directories(${VL_INCLUDE_DIR})
+endif()
+
+include_directories(./include)
+
+add_microbenchmark(lh_swap_mutex lockhammer.c)
+target_compile_definitions(lh_swap_mutex PRIVATE -DATOMIC_TEST="include/swap_mutex.h")
+target_link_libraries(lh_swap_mutex -lm)
+
+add_microbenchmark(lh_cas_lockref lockhammer.c)
+target_compile_definitions(lh_cas_lockref PRIVATE -DATOMIC_TEST="include/cas_lockref.h")
+target_link_libraries(lh_cas_lockref -lm)
+
+add_microbenchmark(lh_cas_rw_lock lockhammer.c)
+target_compile_definitions(lh_cas_rw_lock PRIVATE -DATOMIC_TEST="include/cas_rw_lock.h")
+target_link_libraries(lh_cas_rw_lock -lm)
+
+add_microbenchmark(lh_event_mutex lockhammer.c)
+target_compile_definitions(lh_event_mutex PRIVATE -DATOMIC_TEST="include/mysql/event_mutex.h")
+target_link_libraries(lh_event_mutex -lm)
+
+add_microbenchmark(lh_cas_event_mutex lockhammer.c)
+target_compile_definitions(lh_cas_event_mutex PRIVATE -DATOMIC_TEST="include/mysql/cas_event_mutex.h")
+target_link_libraries(lh_cas_event_mutex -lm)
+
+add_microbenchmark(lh_ticket_spinlock lockhammer.c)
+target_compile_definitions(lh_ticket_spinlock PRIVATE -DATOMIC_TEST="include/linux/ticket_spinlock.h")
+target_link_libraries(lh_ticket_spinlock -lm)
+
+add_microbenchmark(lh_queued_spinlock lockhammer.c)
+target_compile_definitions(lh_queued_spinlock PRIVATE -DATOMIC_TEST="include/linux/queued_spinlock.h")
+target_link_libraries(lh_queued_spinlock -lm)
+
+if(NOT TARGET lockhammer)
+    add_custom_target(lockhammer)
+    add_dependencies(lockhammer
+        lh_swap_mutex lh_cas_lockref lh_cas_rw_lock lh_event_mutex
+        lh_cas_event_mutex lh_ticket_spinlock lh_queued_spinlock)
+endif()

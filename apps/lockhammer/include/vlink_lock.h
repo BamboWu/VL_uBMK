@@ -32,13 +32,20 @@
 #ifdef initialize_lock
 #undef initialize_lock
 #endif
+#ifdef thread_local_init
+#undef thread_local_init
+#endif
+#ifdef thread_local_done
+#undef thread_local_done
+#endif
 
 #define initialize_lock(lock, threads) vlink_lock_init(lock, threads)
+#define thread_local_init(smtid) vlink_lock_thread_init(smtid)
+#define thread_local_done(smtid) vlink_lock_thread_done(smtid)
 
 #include "vl/vl.h"
 
 __thread vlendpt_t prod, cons;
-__thread bool opened = false;
 
 void vlink_lock_init(uint64_t *lock, uint64_t threads) {
 	*lock = mkvl(0);
@@ -48,13 +55,18 @@ void vlink_lock_init(uint64_t *lock, uint64_t threads) {
   byte_vl_flush(&endpt);
 }
 
+void vlink_lock_thread_init(uint64_t smtid) {
+  open_byte_vl_as_producer(1, &prod, 1);
+  open_byte_vl_as_consumer(1, &cons, 1);
+}
+
+void vlink_lock_thread_done(uint64_t smtid) {
+  close_byte_vl_as_producer(prod);
+  close_byte_vl_as_consumer(cons);
+}
+
 static inline unsigned long lock_acquire (uint64_t *lock, unsigned long threadnum) {
   uint8_t tmp = 0;
-  if (!opened) {
-    open_byte_vl_as_producer(*lock, &prod, 1);
-    open_byte_vl_as_consumer(*lock, &cons, 1);
-    opened = true;
-  }
   byte_vl_pop_weak(&cons, &tmp);
   return 1;
 }

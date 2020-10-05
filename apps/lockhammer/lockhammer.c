@@ -498,5 +498,7 @@ void* hmr(void *ptr)
     *(x->real_nsec) = real_ns_elap;
     *(x->depth) = total_depth;
 
+    thread_local_done(mycore);
+
     return NULL;
 }

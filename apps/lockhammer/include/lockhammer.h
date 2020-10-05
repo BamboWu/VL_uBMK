@@ -42,6 +42,9 @@
 #ifndef thread_local_init
     #define thread_local_init(smtid)
 #endif
+#ifndef thread_local_done
+    #define thread_local_done(smtid)
+#endif
 
 enum units { NS,
              INSTS };

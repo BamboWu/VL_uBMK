@@ -36,9 +36,20 @@ add_microbenchmark(lh_queued_spinlock lockhammer.c)
 target_compile_definitions(lh_queued_spinlock PRIVATE -DATOMIC_TEST="include/linux/queued_spinlock.h")
 target_link_libraries(lh_queued_spinlock -lm)
 
+if(VL_FOUND)
+    add_microbenchmark(lh_vlink_lock lockhammer.c)
+    target_compile_definitions(lh_vlink_lock PRIVATE -DATOMIC_TEST="include/vlink_lock.h")
+    target_link_libraries(lh_vlink_lock -lm ${VL_LIBRARY})
+else()
+    MESSAGE(STATUS "WARNING: No zmq library, skip lh_vlink_lock.")
+endif()
+    
 if(NOT TARGET lockhammer)
     add_custom_target(lockhammer)
     add_dependencies(lockhammer
         lh_swap_mutex lh_cas_lockref lh_cas_rw_lock lh_event_mutex
         lh_cas_event_mutex lh_ticket_spinlock lh_queued_spinlock)
+    if(VL_FOUND)
+        add_dependencies(lockhammer lh_vlink_lock)
+    endif()
 endif()

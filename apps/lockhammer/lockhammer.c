@@ -47,6 +47,10 @@
 
 #include ATOMIC_TEST
 
+#ifndef NOGEM5
+#include "gem5/m5ops.h"
+#endif
+
 uint64_t test_lock = 0;
 uint64_t sync_lock = 0;
 uint64_t calibrate_lock = 0;
@@ -243,6 +247,10 @@ int main(int argc, char** argv)
     // Get frequency of clock, and divide by 1B to get # of ticks per ns
     tickspns = (double)timer_get_cnt_freq() / 1000000000.0; 
 
+#ifndef NOGEM5
+    m5_reset_stats(0, 0);
+#endif
+
     thread_args t_args[args.nthrds];
     for (i = 0; i < args.nthrds; ++i) {
         hmrs[i] = 0;
@@ -269,6 +277,11 @@ int main(int argc, char** argv)
     for (i = 0; i < args.nthrds; ++i) {
         result = pthread_join(hmr_threads[i], NULL);
     }
+
+#ifndef NOGEM5
+    m5_dump_reset_stats(0, 0);
+#endif
+
     /* "Marshal" thread will collect start time once all threads have
         reported ready so we only need to collect the end time here */
     clock_gettime(CLOCK_MONOTONIC, &tv_time);

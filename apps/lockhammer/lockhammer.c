@@ -247,10 +247,6 @@ int main(int argc, char** argv)
     // Get frequency of clock, and divide by 1B to get # of ticks per ns
     tickspns = (double)timer_get_cnt_freq() / 1000000000.0; 
 
-#ifndef NOGEM5
-    m5_reset_stats(0, 0);
-#endif
-
     thread_args t_args[args.nthrds];
     for (i = 0; i < args.nthrds; ++i) {
         hmrs[i] = 0;
@@ -473,6 +469,11 @@ void* hmr(void *ptr)
 
     clock_gettime(CLOCK_MONOTONIC, &tv_monot_start);
     clock_gettime(CLOCK_THREAD_CPUTIME_ID, &tv_start);
+
+#ifndef NOGEM5
+    if (mycore == 0)
+        m5_reset_stats(0, 0);
+#endif
 
     while (!target_locks || nlocks < target_locks) {
         /* Do a lock thing */

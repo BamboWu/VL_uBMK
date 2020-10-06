@@ -43,11 +43,14 @@
 #define thread_local_init(smtid) vlink_lock_thread_init(smtid)
 #define thread_local_done(smtid) vlink_lock_thread_done(smtid)
 
+#include <signal.h>
 #include "vl/vl.h"
 
+volatile sig_atomic_t ready = 0;
 __thread vlendpt_t prod, cons;
 
 void vlink_lock_init(uint64_t *lock, uint64_t threads) {
+  ready = threads;
 	*lock = mkvl(0);
   vlendpt_t endpt;
   open_byte_vl_as_producer(*lock, &endpt, 1);
@@ -58,6 +61,8 @@ void vlink_lock_init(uint64_t *lock, uint64_t threads) {
 void vlink_lock_thread_init(uint64_t smtid) {
   open_byte_vl_as_producer(1, &prod, 1);
   open_byte_vl_as_consumer(1, &cons, 1);
+  ready--;
+  while(ready) { /* waiting for all threads get their endpoint ready */ }
 }
 
 void vlink_lock_thread_done(uint64_t smtid) {

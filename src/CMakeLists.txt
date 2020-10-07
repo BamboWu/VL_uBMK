@@ -33,3 +33,8 @@ if(ZMQ_STATIC_FOUND OR ZMQ_DYNAMIC_FOUND)
 elseif(NOT (ZMQ_STATIC_FOUND OR ZMQ_DYNAMIC_FOUND))
   MESSAGE(STATUS "WARNING: No zmq library, skip phish library.")
 endif()
+
+if(Boost_LOCKFREE_QUEUE_HPP)
+  add_library(boost_qlock STATIC boost_qlock.cc)
+  target_include_directories(boost_qlock PRIVATE ${Boost_INCLUDE_DIRS})
+endif()

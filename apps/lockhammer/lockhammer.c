@@ -243,7 +243,11 @@ int main(int argc, char** argv)
         pthread_attr_setschedparam(&hmr_attr, &sparam);
     }
 
+#ifdef NTHRDS_READY
+    initialize_lock(&test_lock, args.nthrds);
+#else
     initialize_lock(&test_lock, num_cores);
+#endif
     // Get frequency of clock, and divide by 1B to get # of ticks per ns
     tickspns = (double)timer_get_cnt_freq() / 1000000000.0; 
 

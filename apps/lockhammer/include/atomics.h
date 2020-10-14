@@ -67,7 +67,10 @@ static inline void wait64 (unsigned long *lock, unsigned long val) {
 	#else
 	volatile unsigned long *v = lock;
 
-	while (*v != val);
+	while (*v != val)
+    {
+        __asm__ volatile( "nop" : : :);
+    }
 	#endif
 }
 
@@ -87,7 +90,10 @@ static inline void wait32 (uint32_t *lock, uint32_t val) {
 	#else
 	volatile uint32_t *v = lock;
 
-	while (*v != val);
+	while (*v != val)
+    {
+        __asm__ volatile( "nop" : : :);
+    }
 	#endif
 }
 
@@ -499,13 +505,16 @@ void synchronize_threads(uint64_t *barrier, unsigned long nthrds)
         // Make sure the store gets observed by the system. Reset count
         // to zero and flip the sense bit.
         __atomic_store_n(barrier, tmp_sense, __ATOMIC_RELEASE);
-    } else {
+    } 
+#if 0    
+    else {
         // Wait only on the sense bit to change.  Avoids race condition
         // where a waiting thread can miss the update to the 64-bit value
         // by the thread that releases the barrier and sees an update from
         // a new thread entering, thus deadlocking us.
         wait32((uint32_t*)((uint8_t*)barrier + 4), local_sense);
     }
+#endif    
 }
 
 #endif // __LH_ATOMICS_H_

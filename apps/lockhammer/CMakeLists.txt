@@ -36,6 +36,9 @@ add_microbenchmark(lh_queued_spinlock lockhammer.c)
 target_compile_definitions(lh_queued_spinlock PRIVATE -DATOMIC_TEST="include/linux/queued_spinlock.h")
 target_link_libraries(lh_queued_spinlock -lm)
 
+FIND_PACKAGE(PkgConfig REQUIRED)
+
+
 if(VL_FOUND)
     add_microbenchmark(lh_vlink_lock lockhammer.c)
     target_compile_definitions(lh_vlink_lock PRIVATE -DNTHRDS_READY -DATOMIC_TEST="include/vlink_lock.h")
@@ -53,9 +56,19 @@ else()
 endif()
 
 if(ZMQ_STATIC_FOUND OR ZMQ_DYNAMIC_FOUND)
+    ##
+    # add general checks so you can use pkg-config for all 
+    # the random zmq dependencies that they don't set up in
+    # their own pkg-config file 
+    ##
     add_microbenchmark(lh_zmq_qlock lockhammer.c)
+    PKG_CHECK_MODULES( SODIUM   REQUIRED IMPORTED_TARGET libsodium )
+    PKG_CHECK_MODULES( LIBNORM  REQUIRED IMPORTED_TARGET norm )
+    PKG_CHECK_MODULES( LIBPGM   REQUIRED IMPORTED_TARGET openpgm-5.2 )
+    PKG_CHECK_MODULES( LIBGSS   REQUIRED IMPORTED_TARGET krb5-gssapi  )
     target_include_directories(lh_zmq_qlock PRIVATE ${ZMQ_INCLUDE_DIR})
-    target_link_libraries(lh_zmq_qlock -lm ${ZMQ_LIBRARY})
+    target_link_libraries(lh_zmq_qlock -lm ${ZMQ_LIBRARY} PkgConfig::SODIUM PkgConfig::LIBNORM 
+                                        PkgConfig::LIBPGM PkgConfig::LIBGSS  )
     target_compile_definitions(lh_zmq_qlock PRIVATE -DNTHRDS_READY -DATOMIC_TEST="include/zmq_lock.h")
     set_target_properties(lh_zmq_qlock PROPERTIES LINKER_LANGUAGE CXX)
 elseif(NOT (ZMQ_STATIC_FOUND OR ZMQ_DYNAMIC_FOUND))

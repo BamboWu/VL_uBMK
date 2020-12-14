@@ -56,11 +56,12 @@ uint64_t roundup64(const uint64_t val) {
 
 void slave(const int desired_core) {
   setAffinity(desired_core);
-  uint64_t arr_base, arr_len, arr_beg, arr_end, isrswap, dummy;
+  Message<int> msg;
+  uint64_t arr_beg, arr_end, isrswap;
   vlendpt_t toslave_cons, tomaster_prod;
   int errorcode;
-  bool isvalid;
   bool done = false;;
+  size_t cnt;
 
   // open endpoints
   if ((errorcode = open_twin_vl_as_consumer(toslave_fd, &toslave_cons, 1))) {
@@ -75,15 +76,12 @@ void slave(const int desired_core) {
   while ((1 + NUM_SLAVES) != ready) { /** spin **/ };
 
   while (!done) {
-    twin_vl_pop_non(&toslave_cons, &arr_base, &isvalid);
-    if (isvalid) {
-      twin_vl_pop_weak(&toslave_cons, &arr_len);
-      twin_vl_pop_weak(&toslave_cons, &arr_beg);
-      twin_vl_pop_weak(&toslave_cons, &arr_end);
-      twin_vl_pop_weak(&toslave_cons, &isrswap);
-      twin_vl_pop_weak(&toslave_cons, &dummy);
-      twin_vl_pop_weak(&toslave_cons, &dummy);
-      int *arr_tmp = (int *)arr_base;
+    line_vl_pop_non(&toslave_cons, (uint8_t*)&msg, &cnt);
+    if (62 == cnt) {
+      arr_beg = msg.arr.beg;
+      arr_end = msg.arr.end;
+      isrswap = msg.arr.torswap;
+      int *arr_tmp = msg.arr.base;
       uint64_t len_tmp = arr_end - arr_beg;
       if (isrswap) {
         rswap(&arr_tmp[arr_beg], len_tmp);
@@ -97,14 +95,7 @@ void slave(const int desired_core) {
           swap(&arr_tmp[beg_tmp], len_tmp);
         }
       }
-      twin_vl_push_weak(&tomaster_prod, arr_base);
-      twin_vl_push_weak(&tomaster_prod, arr_len);
-      twin_vl_push_weak(&tomaster_prod, arr_beg);
-      twin_vl_push_weak(&tomaster_prod, arr_end);
-      // dummy pushes to let message take a entire cacheline
-      twin_vl_push_weak(&tomaster_prod, 0);
-      twin_vl_push_weak(&tomaster_prod, 0);
-      twin_vl_push_weak(&tomaster_prod, 0);
+      line_vl_push_weak(&tomaster_prod, (uint8_t*)&msg, 62);
     }
     done = lock.done;
   }
@@ -115,8 +106,7 @@ void sort(int *arr, const uint64_t len) {
   setAffinity(0);
   int core_id = 1;
   int errorcode;
-  bool isvalid;
-  uint64_t arr_base, arr_len, arr_beg, arr_end, dummy;
+  uint64_t arr_len, arr_beg, arr_end;
   vlendpt_t toslave_prod, tomaster_cons;
 
   // make vlinks
@@ -133,14 +123,14 @@ void sort(int *arr, const uint64_t len) {
     return;
   }
 
-  if ((errorcode = open_twin_vl_as_producer(toslave_fd, &toslave_prod, 1))) {
-    printf("\033[91mFAILED:\033[0m open_twin_vl_as_producer(toslave_fd) "
+  if ((errorcode = open_byte_vl_as_producer(toslave_fd, &toslave_prod, 1))) {
+    printf("\033[91mFAILED:\033[0m open_byte_vl_as_producer(toslave_fd) "
            "return %d\n", errorcode);
     return;
   }
 
-  if ((errorcode = open_twin_vl_as_consumer(tomaster_fd, &tomaster_cons, 1))) {
-    printf("\033[91mFAILED:\033[0m open_twin_vl_as_consumer(tomaster_fd) "
+  if ((errorcode = open_byte_vl_as_consumer(tomaster_fd, &tomaster_cons, 1))) {
+    printf("\033[91mFAILED:\033[0m open_byte_vl_as_consumer(tomaster_fd) "
            "return %d\n", errorcode);
     return;
   }
@@ -161,33 +151,28 @@ void sort(int *arr, const uint64_t len) {
 #endif
 
   // every two elements form a biotonic subarray, ready for swap
+  Message<int> msg(arr, len, 0, 2);
   uint64_t feed_in = 0;  // record how long the array has been feed in
   uint64_t on_the_fly = 0;  // count how mange messages on the fly
   for (; len > feed_in;) {
-    twin_vl_push_weak(&toslave_prod, (uint64_t)arr);
-    twin_vl_push_weak(&toslave_prod, len);
-    twin_vl_push_weak(&toslave_prod, feed_in);
+    msg.arr.beg = feed_in;
     feed_in += 2;
-    twin_vl_push_weak(&toslave_prod, feed_in);
-    twin_vl_push_weak(&toslave_prod, 0);  // isrswap = false
-    // two dummy pushs to let the message take an entire cacheline
-    twin_vl_push_weak(&toslave_prod, 0);
-    twin_vl_push_weak(&toslave_prod, 0);
+    msg.arr.end = feed_in;
+    msg.arr.torswap = false;
+    line_vl_push_weak(&toslave_prod, (uint8_t*)&msg, 62);
     if (++on_the_fly > MAX_ON_THE_FLY) {
       break;
     }
   }
 
   uint8_t *pcount = new uint8_t[len](); // count number of pairing
+  size_t cnt;
   while (true) {
-    twin_vl_pop_non(&tomaster_cons, &arr_base, &isvalid);
-    if (isvalid) {
-      twin_vl_pop_weak(&tomaster_cons, &arr_len);
-      twin_vl_pop_weak(&tomaster_cons, &arr_beg);
-      twin_vl_pop_weak(&tomaster_cons, &arr_end);
-      twin_vl_pop_weak(&tomaster_cons, &dummy);
-      twin_vl_pop_weak(&tomaster_cons, &dummy);
-      twin_vl_pop_weak(&tomaster_cons, &dummy);
+    line_vl_pop_non(&tomaster_cons, (uint8_t*)&msg, &cnt);
+    if (62 == cnt) {
+      arr_len = msg.arr.len;
+      arr_beg = msg.arr.beg;
+      arr_end = msg.arr.end;
       const uint64_t len_to_connect = arr_end - arr_beg;
       if (len_to_connect == len) {
         break; // we are done
@@ -196,29 +181,23 @@ void sort(int *arr, const uint64_t len) {
       const uint64_t idx_1st = arr_beg & ~((len_to_connect << 1) - 1);
       const uint64_t idx_2nd = idx_1st + len_to_connect;
       if (pcount[idx_1st] == pcount[idx_2nd]) {
-        twin_vl_push_weak(&toslave_prod, arr_base);
-        twin_vl_push_weak(&toslave_prod, arr_len);
-        twin_vl_push_weak(&toslave_prod, idx_1st);
-        twin_vl_push_weak(&toslave_prod, idx_2nd + len_to_connect);
-        twin_vl_push_weak(&toslave_prod, 1);  // isrswap = true
-        // two dummy pushs to let the message take an entire cacheline
-        twin_vl_push_weak(&toslave_prod, 0);
-        twin_vl_push_weak(&toslave_prod, 0);
+        msg.arr.len = arr_len;
+        msg.arr.beg = idx_1st;
+        msg.arr.end = idx_2nd + len_to_connect;
+        msg.arr.torswap = true;
+        line_vl_push_weak(&toslave_prod, (uint8_t*)&msg, 62);
       } else {
         on_the_fly--;
       }
     } // if (isvalid)
     // feed in remaining array if space
     if (len > feed_in && MAX_ON_THE_FLY > on_the_fly) {
-      twin_vl_push_weak(&toslave_prod, (uint64_t)arr);
-      twin_vl_push_weak(&toslave_prod, len);
-      twin_vl_push_weak(&toslave_prod, feed_in);
+      msg.arr.len = len;
+      msg.arr.beg = feed_in;
       feed_in += 2;
-      twin_vl_push_weak(&toslave_prod, feed_in);
-      twin_vl_push_weak(&toslave_prod, 0);  // isrswap = false
-      // two dummy pushs to let the message take an entire cacheline
-      twin_vl_push_weak(&toslave_prod, 0);
-      twin_vl_push_weak(&toslave_prod, 0);
+      msg.arr.end = feed_in;
+      msg.arr.torswap = true;
+      line_vl_push_weak(&toslave_prod, (uint8_t*)&msg, 62);
       on_the_fly++;
     }
   } // while (true)

@@ -9,6 +9,8 @@
 #define NUM_SLAVES 1
 #endif
 
+#define MSG_SIZE 62
+
 template <typename T>
 union Message { // Cacheline-size message
   struct {
@@ -16,7 +18,9 @@ union Message { // Cacheline-size message
     uint64_t len;
     uint64_t beg;
     uint64_t end;
+    uint8_t cnt; // count number of pairing
     bool torswap;
+    bool loaded; // scheduled and taken by a slave or not
   } arr;
   uint8_t pad[64]; // make sure it is cacheline-size message
   Message() {}
@@ -141,6 +145,16 @@ void gen(T *arr, const uint64_t len) {
   for (uint64_t i = 0; len > i; ++i) {
     arr[i] = rand();
   }
+}
+
+/* Try to pair two sorted adjacent subarrays */
+template <typename T>
+bool pair(uint8_t *pcount, T beg, T *pidx_1st) {
+  T cnt = pcount[beg];
+  T len_sorted = 1 << cnt;
+  *pidx_1st = (beg >> (cnt + 1)) << (cnt + 1);
+  T idx_2nd = *pidx_1st + len_sorted;
+  return (pcount[*pidx_1st] == pcount[idx_2nd]);
 }
 
 #endif

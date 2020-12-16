@@ -6,6 +6,7 @@
 #include <limits.h>
 #include <assert.h>
 #include <atomic>
+#include <sstream>
 
 #ifndef STDTHREAD
 #include <boost/thread.hpp>
@@ -34,9 +35,20 @@ using boost::thread;
 using std::thread;
 #endif
 
+int topair_fd;
 int toslave_fd;
 int tomaster_fd;
+int *arr_base;
+uint64_t arr_len;
+
 std::atomic<int> ready;
+
+#ifdef DBG
+std::ostringstream oss (std::ostringstream::ate);
+void dbg() {
+  std::cout << oss.str();
+}
+#endif
 
 union {
   bool done; // to tell other threads we are done, only master thread writes
@@ -56,47 +68,109 @@ uint64_t roundup64(const uint64_t val) {
 
 void slave(const int desired_core) {
   setAffinity(desired_core);
-  Message<int> msg;
-  uint64_t arr_beg, arr_end, isrswap;
-  vlendpt_t toslave_cons, tomaster_prod;
-  int errorcode;
+  int *arr = arr_base;
+  const uint64_t len = arr_len;
+  uint8_t *pcount = new uint8_t[len](); // count number of pairing
   bool done = false;;
+  vlendpt_t toslave_cons, topair_prod, tomaster_prod;
+  int errorcode;
+  Message<int> msg;
   size_t cnt;
+  uint64_t task_beg;
+  bool loaded = false;
+  // loaded indicates if task_beg, pcount[task_beg] are set for a valid task
 
   // open endpoints
-  if ((errorcode = open_twin_vl_as_consumer(toslave_fd, &toslave_cons, 1))) {
+  if ((errorcode = open_byte_vl_as_consumer(toslave_fd, &toslave_cons, 1))) {
     printf("\033[91mFAILED:\033[0m %s(), toslave_cons\n", __func__);
     return;
   }
-  if ((errorcode = open_twin_vl_as_producer(tomaster_fd, &tomaster_prod, 1))) {
+  if ((errorcode = open_byte_vl_as_producer(topair_fd, &topair_prod, 1))) {
+    printf("\033[91mFAILED:\033[0m %s(), topair_prod\n", __func__);
+    return;
+  }
+  if ((errorcode = open_byte_vl_as_producer(tomaster_fd, &tomaster_prod, 1))) {
     printf("\033[91mFAILED:\033[0m %s(), tomaster_prod\n", __func__);
     return;
   }
+
+#ifdef SLAVE_HELP_PAIRING
+  vlendpt_t topair_cons;
+  if ((errorcode = open_byte_vl_as_consumer(topair_fd, &topair_cons, 1))) {
+    printf("\033[91mFAILED:\033[0m %s(), topair_cons\n", __func__);
+    return;
+  }
+#endif
+
   ready++;
   while ((1 + NUM_SLAVES) != ready) { /** spin **/ };
 
   while (!done) {
-    line_vl_pop_non(&toslave_cons, (uint8_t*)&msg, &cnt);
-    if (62 == cnt) {
-      arr_beg = msg.arr.beg;
-      arr_end = msg.arr.end;
-      isrswap = msg.arr.torswap;
-      int *arr_tmp = msg.arr.base;
-      uint64_t len_tmp = arr_end - arr_beg;
-      if (isrswap) {
-        rswap(&arr_tmp[arr_beg], len_tmp);
-      } else {
-        swap(&arr_tmp[arr_beg], len_tmp);
+    if (!loaded) {
+      // try getting a sorting task scheduled
+      line_vl_pop_non(&toslave_cons, (uint8_t*)&msg, &cnt);
+      if (MSG_SIZE == cnt) { // get a sorting task
+        task_beg = msg.arr.beg;
+        pcount[task_beg] = msg.arr.cnt;
+        loaded = true;
       }
+    }
+
+    if (loaded) {
+      // do the sorting task
+      pcount[task_beg]++;
+      uint64_t len_tmp = 1 << pcount[task_beg];
+      uint64_t task_end = task_beg + len_tmp;
+      loaded = false;
+      rswap(&arr[task_beg], len_tmp);
       while (2 < len_tmp) {
         len_tmp >>= 1;
-        for (uint64_t beg_tmp = arr_beg; beg_tmp < arr_end;
+        for (uint64_t beg_tmp = task_beg; beg_tmp < task_end;
              beg_tmp += len_tmp) {
-          swap(&arr_tmp[beg_tmp], len_tmp);
+          swap(&arr[beg_tmp], len_tmp);
         }
       }
-      line_vl_push_weak(&tomaster_prod, (uint8_t*)&msg, 62);
+      if (len == (uint64_t)(1 << pcount[0])) {
+        msg.arr.beg = 0;
+        msg.arr.cnt = pcount[0];
+        line_vl_push_strong(&tomaster_prod, (uint8_t*)&msg, MSG_SIZE);
+        break; // we are done
+      }
+
+#ifdef SLAVE_LOAD_SELF
+      // do pairing before sending out
+      uint64_t beg_tmp;
+      loaded = pair(pcount, task_beg, &beg_tmp);
+      task_beg = loaded ? beg_tmp : task_beg;
+#endif // SLAVE_LOAD_SELF
+
+      msg.arr.beg = task_beg;
+      msg.arr.cnt = pcount[task_beg];
+      msg.arr.loaded = loaded;
+      if (loaded) { // paired, take the task and just let the master know
+        line_vl_push_strong(&tomaster_prod, (uint8_t*)&msg, MSG_SIZE);
+      } else { // need other slaves or the master to pair
+        line_vl_push_strong(&topair_prod, (uint8_t*)&msg, MSG_SIZE);
+      }
+      continue;
     }
+
+#ifdef SLAVE_HELP_PAIRING
+    // try helping the master to schedule a sorting task
+    line_vl_pop_non(&topair_cons, (uint8_t*)&msg, &cnt);
+    if (MSG_SIZE == cnt) { // get a sorting task
+      if (msg.arr.cnt > pcount[msg.arr.beg]) {
+        pcount[msg.arr.beg] = msg.arr.cnt; // could only increase
+        loaded = pair(pcount, msg.arr.beg, &task_beg);
+        if (task_beg != msg.arr.beg) { // break symmetry, otherwise 2 slaves
+            loaded = false;            // could claim the same task
+        }
+        msg.arr.loaded = loaded;
+      }
+      // no matter paired or not, let the master know
+      line_vl_push_strong(&tomaster_prod, (uint8_t*)&msg, MSG_SIZE);
+    }
+#endif
     done = lock.done;
   }
 }
@@ -106,10 +180,17 @@ void sort(int *arr, const uint64_t len) {
   setAffinity(0);
   int core_id = 1;
   int errorcode;
-  uint64_t arr_len, arr_beg, arr_end;
-  vlendpt_t toslave_prod, tomaster_cons;
+  size_t cnt;
+  uint64_t task_beg;
+  vlendpt_t topair_cons, toslave_prod, tomaster_cons;
 
   // make vlinks
+  topair_fd = mkvl();
+  if (0 > topair_fd) {
+    printf("\033[91mFAILED:\033[0m topair_fd = mkvl() "
+           "return %d\n", topair_fd);
+    return;
+  }
   toslave_fd = mkvl();
   if (0 > toslave_fd) {
     printf("\033[91mFAILED:\033[0m toslave_fd = mkvl() "
@@ -120,6 +201,13 @@ void sort(int *arr, const uint64_t len) {
   if (0 > tomaster_fd) {
     printf("\033[91mFAILED:\033[0m tomaster_fd = mkvl() "
            "return %d\n", tomaster_fd);
+    return;
+  }
+
+  // open endpoints
+  if ((errorcode = open_byte_vl_as_consumer(topair_fd, &topair_cons, 1))) {
+    printf("\033[91mFAILED:\033[0m open_byte_vl_as_producer(toslave_fd) "
+           "return %d\n", errorcode);
     return;
   }
 
@@ -135,6 +223,9 @@ void sort(int *arr, const uint64_t len) {
     return;
   }
 
+  // set common info and ready counter before launchgin slave threads
+  arr_base = arr;
+  arr_len = len;
   ready = 0;
   std::vector<thread> slave_threads;
   for (int i = 0; NUM_SLAVES > i; ++i) {
@@ -153,52 +244,83 @@ void sort(int *arr, const uint64_t len) {
   // every two elements form a biotonic subarray, ready for swap
   Message<int> msg(arr, len, 0, 2);
   uint64_t feed_in = 0;  // record how long the array has been feed in
-  uint64_t on_the_fly = 0;  // count how mange messages on the fly
-  for (; len > feed_in;) {
+  for (; len > feed_in; feed_in += 2) {
     msg.arr.beg = feed_in;
-    feed_in += 2;
-    msg.arr.end = feed_in;
-    msg.arr.torswap = false;
-    line_vl_push_weak(&toslave_prod, (uint8_t*)&msg, 62);
-    if (++on_the_fly > MAX_ON_THE_FLY) {
+    msg.arr.cnt = 0;
+    if (!line_vl_push_non(&toslave_prod, (uint8_t*)&msg, MSG_SIZE) ||
+        MAX_ON_THE_FLY <= vl_size(&toslave_prod)) {
+      // reach the queue capacity, do the remaining later
       break;
     }
+#ifdef DBG
+    oss << "init_feedin " << feed_in << "\n";
+#endif
   }
 
   uint8_t *pcount = new uint8_t[len](); // count number of pairing
-  size_t cnt;
+  uint8_t *lcount = new uint8_t[len](); // count number received as loaded
   while (true) {
+    // first check if there is any task exclusively for the master
     line_vl_pop_non(&tomaster_cons, (uint8_t*)&msg, &cnt);
-    if (62 == cnt) {
-      arr_len = msg.arr.len;
-      arr_beg = msg.arr.beg;
-      arr_end = msg.arr.end;
-      const uint64_t len_to_connect = arr_end - arr_beg;
-      if (len_to_connect == len) {
-        break; // we are done
-      }
-      pcount[arr_beg]++;
-      const uint64_t idx_1st = arr_beg & ~((len_to_connect << 1) - 1);
-      const uint64_t idx_2nd = idx_1st + len_to_connect;
-      if (pcount[idx_1st] == pcount[idx_2nd]) {
-        msg.arr.len = arr_len;
-        msg.arr.beg = idx_1st;
-        msg.arr.end = idx_2nd + len_to_connect;
-        msg.arr.torswap = true;
-        line_vl_push_weak(&toslave_prod, (uint8_t*)&msg, 62);
+    if (MSG_SIZE == cnt) {
+      task_beg = msg.arr.beg;
+      if (msg.arr.cnt > pcount[task_beg]) {
+        pcount[task_beg] = msg.arr.cnt; // could only increase
+#ifdef DBG
+        oss << "tomaster(pcount[" << task_beg << "]=" <<
+            (uint64_t)pcount[task_beg] << "," <<
+            ((msg.arr.loaded) ? "loaded)\n" : "unloaded)\n");
+#endif
+        if (len == (uint64_t)(1 << pcount[0])) {
+          break; // we are done
+        } else if (!msg.arr.loaded) {
+          if (pair(pcount, task_beg, &task_beg) &&         // paired and
+                   pcount[task_beg] != lcount[task_beg]) { // haven't taken
+            msg.arr.beg = task_beg;
+            msg.arr.cnt = pcount[task_beg];
+#ifdef DBG
+            oss << "toslave(pcount[" << task_beg << "]=" <<
+                (uint64_t)pcount[task_beg] << ")\n";
+#endif
+            line_vl_push_strong(&toslave_prod, (uint8_t*)&msg, MSG_SIZE);
+          }
+        } else { // it is just a report of taken task
+          lcount[task_beg] = msg.arr.cnt;
+        }
+      } // else { // this is an out-of-dated msg
+    } else { // tomaster queue empty, feed in remaining or check topair queue
+      if (len > feed_in && MAX_ON_THE_FLY > vl_size(&toslave_prod)) {
+        msg.arr.beg = feed_in;
+        msg.arr.cnt = 0;
+#ifdef DBG
+        oss << "feedin " << feed_in << "\n";
+#endif
+        line_vl_push_strong(&toslave_prod, (uint8_t*)&msg, MSG_SIZE);
+        feed_in += 2;
       } else {
-        on_the_fly--;
+        // no remaining array or capacity, check topair queue
+        line_vl_pop_non(&topair_cons, (uint8_t*)&msg, &cnt);
+        if (MSG_SIZE == cnt) {
+          task_beg = msg.arr.beg;
+          if (msg.arr.cnt > pcount[task_beg]) {
+            pcount[task_beg] = msg.arr.cnt; // could only increase
+#ifdef DBG
+            oss << "topair(pcount[" << task_beg << "]=" <<
+                (uint64_t)pcount[task_beg] << ")\n";
+#endif
+            if (pair(pcount, task_beg, &task_beg) &&    // paired and
+                pcount[task_beg] != lcount[task_beg]) { // haven't taken
+              msg.arr.beg = task_beg;
+              msg.arr.cnt = pcount[task_beg];
+#ifdef DBG
+              oss << "toslave(pcount[" << task_beg << "]=" <<
+                  (uint64_t)pcount[task_beg] << ")\n";
+#endif
+              line_vl_push_strong(&toslave_prod, (uint8_t*)&msg, MSG_SIZE);
+            }
+          }
+        }
       }
-    } // if (isvalid)
-    // feed in remaining array if space
-    if (len > feed_in && MAX_ON_THE_FLY > on_the_fly) {
-      msg.arr.len = len;
-      msg.arr.beg = feed_in;
-      feed_in += 2;
-      msg.arr.end = feed_in;
-      msg.arr.torswap = true;
-      line_vl_push_weak(&toslave_prod, (uint8_t*)&msg, 62);
-      on_the_fly++;
     }
   } // while (true)
 
@@ -213,6 +335,9 @@ void sort(int *arr, const uint64_t len) {
   const auto end(high_resolution_clock::now());
   const auto elapsed(duration_cast<nanoseconds>(end - beg));
 
+#ifdef DBG
+  dbg();
+#endif
   std::cout << (end_tsc - beg_tsc) << " ticks elapsed\n";
   std::cout << elapsed.count() << " ns elapsed\n";
 

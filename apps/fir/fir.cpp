@@ -204,7 +204,7 @@ data_t FIR::filter(data_t input)
 void
 input_stream(
 #ifdef VL
-    int fd,
+    vl_q_t* q_out,
 #elif ZMQ
     zmq_q_t* q_out,
 #else 
@@ -216,16 +216,6 @@ input_stream(
 ){
     setAffinity( (ready+1)%NUM_CORES );
     //std::cout << "Input : " << (ready+1)%NUM_CORES << std::endl;
-#ifdef VL
-    vl_q_t q_out;
-    q_out.open(fd, 1, true);
-    vl_q_t *out = &q_out;
-#elif ZMQ
-    q_out.open("in_stream", true);
-    zmq_q_t *out = q_out;
-#else
-    boost_q_t *out = q_out;
-#endif
     unsigned int t_samples(samples);
     srand (256);
     ready++;
@@ -233,10 +223,10 @@ input_stream(
     while(t_samples--)
     {
         data_t input_data = (data_t)(rand() % 1000);
-        while(!out->push(input_data));
+        while(!q_out->push(input_data));
     }
 #ifdef VL
-    out->flush();
+    q_out->flush();
 #endif
     return; 
 }
@@ -244,8 +234,8 @@ input_stream(
 void
 queued_fir(
 #ifdef VL
-    int fd_in,
-    int fd_out,
+    vl_q_t* q_in,
+    vl_q_t* q_out,
 #elif ZMQ
     zmq_q_t* q_in,
     zmq_q_t* q_out,
@@ -259,21 +249,6 @@ queued_fir(
 ){
     setAffinity( (ready+1)%NUM_CORES );
     //std::cout << "FIR : " << (ready+1)%NUM_CORES << std::endl;
-#ifdef VL
-    vl_q_t q_in, q_out;
-    q_in.open(fd_in, 1, false);
-    q_out.open(fd_out, 1, true);
-    vl_q_t *in = &q_in;
-    vl_q_t *out = &q_out;
-#elif ZMQ
-    q_in->open("unique text", false);
-    zmq_q_t *in = q_in;
-    q_out->open("ddydhkdjeiy", true);
-    zmq_q_t *out = q_out;
-#else
-    boost_q_t *in  = q_in;
-    boost_q_t *out = q_out;
-#endif
 
     unsigned int t_samples(samples);
 
@@ -286,11 +261,11 @@ queued_fir(
     while( ready != num_threads ){ /** spin **/ };
     while(t_samples--)
     {
-        while(!in->pop(input_data));
-        while(!out->push(fir1->filter(input_data)));
+        while(!q_in->pop(input_data));
+        while(!q_out->push(fir1->filter(input_data)));
     }
 #ifdef VL
-    out->flush();
+    q_out->flush();
 #endif
     delete fir1;
     return; 
@@ -300,7 +275,7 @@ queued_fir(
 void
 output_stream(
 #ifdef VL
-    int fd,
+    vl_q_t* q_in,
 #elif ZMQ
     zmq_q_t* q_in,
 #else 
@@ -312,16 +287,6 @@ output_stream(
 ){
     setAffinity( (ready+1)%NUM_CORES );
     //std::cout << "Output : " << (ready+1)%NUM_CORES << std::endl;
-#ifdef VL
-    vl_q_t q_in;
-    q_in.open(fd, 1, false);
-    vl_q_t *in = &q_in;
-#elif ZMQ
-    q_in->open("out_stream", false);
-    zmq_q_t *in = q_in;
-#else
-    boost_q_t *in = q_in;
-#endif
 
     unsigned int t_samples(samples);
     data_t output_data;
@@ -329,7 +294,7 @@ output_stream(
     while( ready != num_threads ){ /** spin **/ };
     while(t_samples--)
     {
-        while(!in->pop(output_data));
+        while(!q_in->pop(output_data));
 	//std::cout << output_data << std::endl;
     }
     return; 
@@ -351,7 +316,11 @@ int main( int argc, char **argv )
     std::cout << argv[0] << " FIR stages = " << stages << ", samples = " << samples << "\n" ;
 #ifdef VL
     int* fds;
-    fds = new int [stages+1];
+    fds  = new int [stages+1];
+    vl_q_t* p_qs;
+    vl_q_t* c_qs;
+    p_qs = new vl_q_t [stages+1];
+    c_qs = new vl_q_t [stages+1];
     
     for(int i=0; i <= stages; i++){
         fds[i] = mkvl();
@@ -359,19 +328,25 @@ int main( int argc, char **argv )
             std::cerr << "mkvl() return invalid file descriptor\n";
             return fds[i];
         }
+        p_qs[i].open(fds[i], 1, true);
+        c_qs[i].open(fds[i], 1, false);
     }
-#ifdef VERBOSE
-    std::cout << "VL queues opened\n";
-#endif
 #elif ZMQ
     ctx = zmq_ctx_new();
     assert(ctx);
-    zmq_q_t* qs;
-    qs = new zmq_q_t[stages+1];
+    std::vector<zmq_q_t*> qs;
+    for (unsigned int i=0; i < stages+1; i++){
+	const auto val = std::to_string(i);
+	const auto q   = new zmq_q_t();
+        q->open(val, false);
+        q->open(val, true);
+        qs.push_back(q);
+    }
 #else 
     std::vector<boost_q_t*> qs;
     for (unsigned int i=0; i < stages+1; i++){
-        qs.push_back( new boost_q_t( CAPACITY / sizeof(data_t) ) );
+        const auto q = new boost_q_t( CAPACITY / sizeof(data_t) );
+        qs.push_back(q);
     }
 #endif
 
@@ -380,7 +355,7 @@ int main( int argc, char **argv )
     thread t_output(
 		    output_stream,
 #ifdef VL
-                    fds[stages],
+                    &c_qs[stages],
 #else
                     qs[stages],
 #endif
@@ -393,8 +368,8 @@ int main( int argc, char **argv )
         fir_threads.push_back(
 			      thread(queued_fir,
 #ifdef VL
-                              fds[i],
-                              fds[i+1],
+                              &c_qs[i],
+                              &p_qs[i+1],
 #else 
                               qs[i],
                               qs[i+1],
@@ -407,7 +382,7 @@ int main( int argc, char **argv )
     thread t_input(
 		    input_stream,
 #ifdef VL
-                    fds[0],
+                    &p_qs[0],
 #else 
                     qs[0],
 #endif
@@ -437,10 +412,7 @@ int main( int argc, char **argv )
     std::cout << "Good Job Guys !!!\n";
 #ifdef VL
     delete[] fds;
-#ifdef VERBOSE
-    std::cout << "VL released\n";
-#endif
-#elif ZMQ
-    delete[] queues;
+    delete[] p_qs;
+    delete[] c_qs;
 #endif
 }

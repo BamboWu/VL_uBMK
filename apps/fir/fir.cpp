@@ -37,7 +37,7 @@
 #include "gem5/m5ops.h"
 #endif
 
-#define NUM_CORES 4
+#define NUM_CORES 4 
 #define CAPACITY 4096
 #define TAPS_FIR 16
 
@@ -215,6 +215,7 @@ input_stream(
     unsigned int num_threads
 ){
     setAffinity( (ready+1)%NUM_CORES );
+    //std::cout << "Input : " << (ready+1)%NUM_CORES << std::endl;
 #ifdef VL
     vl_q_t q_out;
     q_out.open(fd, 1, true);
@@ -231,7 +232,7 @@ input_stream(
     while( ready != num_threads ){ /** spin **/ };
     while(t_samples--)
     {
-        data_t input_data = (data_t)(rand() % 100);
+        data_t input_data = (data_t)(rand() % 1000);
         while(!out->push(input_data));
     }
 #ifdef VL
@@ -257,6 +258,7 @@ queued_fir(
     unsigned int num_threads
 ){
     setAffinity( (ready+1)%NUM_CORES );
+    //std::cout << "FIR : " << (ready+1)%NUM_CORES << std::endl;
 #ifdef VL
     vl_q_t q_in, q_out;
     q_in.open(fd_in, 1, false);
@@ -309,6 +311,7 @@ output_stream(
     unsigned int num_threads
 ){
     setAffinity( (ready+1)%NUM_CORES );
+    //std::cout << "Output : " << (ready+1)%NUM_CORES << std::endl;
 #ifdef VL
     vl_q_t q_in;
     q_in.open(fd, 1, false);
@@ -327,7 +330,7 @@ output_stream(
     while(t_samples--)
     {
         while(!in->pop(output_data));
-	std::cout << output_data << std::endl;
+	//std::cout << output_data << std::endl;
     }
     return; 
 }

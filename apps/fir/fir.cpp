@@ -212,10 +212,10 @@ input_stream(
 #endif
     unsigned int samples,
     atomic_t &ready,
-    unsigned int num_threads
+    unsigned int num_threads,
+    unsigned int aff
 ){
-    setAffinity( (ready+1)%NUM_CORES );
-    //std::cout << "Input : " << (ready+1)%NUM_CORES << std::endl;
+    setAffinity(aff);
     unsigned int t_samples(samples);
     srand (256);
     ready++;
@@ -245,10 +245,10 @@ queued_fir(
 #endif
     unsigned int samples,
     atomic_t &ready,
-    unsigned int num_threads
+    unsigned int num_threads,
+    unsigned int aff
 ){
-    setAffinity( (ready+1)%NUM_CORES );
-    //std::cout << "FIR : " << (ready+1)%NUM_CORES << std::endl;
+    setAffinity(aff);
 
     unsigned int t_samples(samples);
 
@@ -283,10 +283,10 @@ output_stream(
 #endif
     unsigned int samples,
     atomic_t &ready,
-    unsigned int num_threads
+    unsigned int num_threads,
+    unsigned int aff
 ){
-    setAffinity( (ready+1)%NUM_CORES );
-    //std::cout << "Output : " << (ready+1)%NUM_CORES << std::endl;
+    setAffinity(aff);
 
     unsigned int t_samples(samples);
     data_t output_data;
@@ -302,6 +302,8 @@ output_stream(
 
 int main( int argc, char **argv )
 {
+    setAffinity(0);
+    unsigned int aff     = 1;
     unsigned int stages  = 2;
     unsigned int samples = 100;
 
@@ -349,7 +351,6 @@ int main( int argc, char **argv )
         qs.push_back(q);
     }
 #endif
-
     atomic_t ready(-1);
 
     thread t_output(
@@ -361,7 +362,9 @@ int main( int argc, char **argv )
 #endif
                     samples,
                     std::ref(ready),
-                    stages+2);
+                    stages+2,
+		    aff%NUM_CORES);
+    aff++;
 
     std::vector<thread> fir_threads;
     for (unsigned int i=0; i < stages; i++){
@@ -376,7 +379,9 @@ int main( int argc, char **argv )
 #endif
                               samples,
                               std::ref(ready),
-                              stages+2));
+                              stages+2,
+			      aff%NUM_CORES));
+	aff++;
     }
 
     thread t_input(
@@ -388,7 +393,9 @@ int main( int argc, char **argv )
 #endif
                     samples,
                     std::ref(ready),
-                    stages+2);
+                    stages+2,
+		    aff%NUM_CORES);
+    aff++;
 
     std::cout << "On Your Mark! Get Set! Go!\n";
 #ifndef NOGEM5

@@ -35,18 +35,19 @@ using boost::thread;
 using std::thread;
 #endif
 
-int topair_fd;
-int toslave_fd;
-int tomaster_fd;
+int tosort_fd; // master enqueues swap/rswap tasks, slaves dequeue
+int topair_fd; // slaves enqueue finished tasks, master dequeues to pair
+int *toexcl_fds; // exclusively dequeued by single thread (indexed by affinity)
 int *arr_base;
 uint64_t arr_len;
 
 std::atomic<int> ready;
 
 #ifdef DBG
-std::ostringstream oss (std::ostringstream::ate);
-void dbg() {
-  std::cout << oss.str();
+std::vector<std::ostringstream> oss;
+void dbg(int id) {
+  std::cout << "dbg(" << id << ")\n";
+  std::cout << oss[id].str() << std::endl;
 }
 #endif
 
@@ -70,26 +71,27 @@ void slave(const int desired_core) {
   setAffinity(desired_core);
   int *arr = arr_base;
   const uint64_t len = arr_len;
-  uint8_t *pcount = new uint8_t[len](); // count number of pairing
+  const uint64_t mini_task_len = 1 << MINI_TASK_EXP;
   bool done = false;;
-  vlendpt_t toslave_cons, topair_prod, tomaster_prod;
+  vlendpt_t tosort_cons, topair_prod, tomaster_prod;
   int errorcode;
   Message<int> msg;
   size_t cnt;
   uint64_t task_beg;
+  uint8_t task_exp;
   bool loaded = false;
-  // loaded indicates if task_beg, pcount[task_beg] are set for a valid task
 
   // open endpoints
-  if ((errorcode = open_byte_vl_as_consumer(toslave_fd, &toslave_cons, 1))) {
-    printf("\033[91mFAILED:\033[0m %s(), toslave_cons\n", __func__);
+  if ((errorcode = open_byte_vl_as_consumer(tosort_fd, &tosort_cons, 1))) {
+    printf("\033[91mFAILED:\033[0m %s(), tosort_cons\n", __func__);
     return;
   }
-  if ((errorcode = open_byte_vl_as_producer(topair_fd, &topair_prod, 1))) {
+  if ((errorcode = open_byte_vl_as_producer(topair_fd, &topair_prod, 128))) {
     printf("\033[91mFAILED:\033[0m %s(), topair_prod\n", __func__);
     return;
   }
-  if ((errorcode = open_byte_vl_as_producer(tomaster_fd, &tomaster_prod, 1))) {
+  if ((errorcode = open_byte_vl_as_producer(toexcl_fds[0], &tomaster_prod,
+                                            1))) {
     printf("\033[91mFAILED:\033[0m %s(), tomaster_prod\n", __func__);
     return;
   }
@@ -108,69 +110,108 @@ void slave(const int desired_core) {
   while (!done) {
     if (!loaded) {
       // try getting a sorting task scheduled
-      line_vl_pop_non(&toslave_cons, (uint8_t*)&msg, &cnt);
+      line_vl_pop_non(&tosort_cons, (uint8_t*)&msg, &cnt);
       if (MSG_SIZE == cnt) { // get a sorting task
-        task_beg = msg.arr.beg;
-        pcount[task_beg] = msg.arr.cnt;
         loaded = true;
       }
     }
 
     if (loaded) {
       // do the sorting task
-      pcount[task_beg]++;
-      uint64_t len_tmp = 1 << pcount[task_beg];
-      uint64_t task_end = task_beg + len_tmp;
-      loaded = false;
-      rswap(&arr[task_beg], len_tmp);
-      while (2 < len_tmp) {
-        len_tmp >>= 1;
-        for (uint64_t beg_tmp = task_beg; beg_tmp < task_end;
-             beg_tmp += len_tmp) {
-          swap(&arr[beg_tmp], len_tmp);
-        }
-      }
-      if (len == (uint64_t)(1 << pcount[0])) {
-        msg.arr.beg = 0;
-        msg.arr.cnt = pcount[0];
-        line_vl_push_strong(&tomaster_prod, (uint8_t*)&msg, MSG_SIZE);
-        break; // we are done
-      }
-
-#ifdef SLAVE_LOAD_SELF
-      // do pairing before sending out
-      uint64_t beg_tmp;
-      loaded = pair(pcount, task_beg, &beg_tmp);
-      task_beg = loaded ? beg_tmp : task_beg;
-#endif // SLAVE_LOAD_SELF
-
-      msg.arr.beg = task_beg;
-      msg.arr.cnt = pcount[task_beg];
-      msg.arr.loaded = loaded;
-      if (loaded) { // paired, take the task and just let the master know
-        line_vl_push_strong(&tomaster_prod, (uint8_t*)&msg, MSG_SIZE);
-      } else { // need other slaves or the master to pair
-        line_vl_push_strong(&topair_prod, (uint8_t*)&msg, MSG_SIZE);
-      }
-      continue;
-    }
-
-#ifdef SLAVE_HELP_PAIRING
-    // try helping the master to schedule a sorting task
-    line_vl_pop_non(&topair_cons, (uint8_t*)&msg, &cnt);
-    if (MSG_SIZE == cnt) { // get a sorting task
-      if (msg.arr.cnt > pcount[msg.arr.beg]) {
-        pcount[msg.arr.beg] = msg.arr.cnt; // could only increase
-        loaded = pair(pcount, msg.arr.beg, &task_beg);
-        if (task_beg != msg.arr.beg) { // break symmetry, otherwise 2 slaves
-            loaded = false;            // could claim the same task
-        }
-        msg.arr.loaded = loaded;
-      }
-      // no matter paired or not, let the master know
-      line_vl_push_strong(&tomaster_prod, (uint8_t*)&msg, MSG_SIZE);
-    }
+      task_beg = msg.arr.beg;
+      task_exp = msg.arr.exp;
+#ifdef DBG
+      oss[desired_core] << "TASK: " <<
+        (msg.arr.torswap ? "rswap(" : "swap(") << task_beg <<
+        ", " << (uint64_t)task_exp << ")\n";
 #endif
+      if (MINI_TASK_EXP < task_exp) { // not initial task or bottom
+        uint64_t beg_tmp = (task_beg >> task_exp) << task_exp;
+        if (msg.arr.torswap) {
+          rswap_seg(&arr[beg_tmp], 1 << task_exp,
+                    task_beg - beg_tmp, task_beg + mini_task_len - beg_tmp);
+#ifdef DBG
+          oss[desired_core] << "  rswap_seg(arr[" << beg_tmp << "], " <<
+            (1 << task_exp) << ", " << (task_beg - beg_tmp) << ", " <<
+            (task_beg + mini_task_len - beg_tmp) << ")\n";
+#endif
+        } else {
+          swap_seg(&arr[beg_tmp], 1 << task_exp,
+                   task_beg - beg_tmp, task_beg + mini_task_len - beg_tmp);
+#ifdef DBG
+          oss[desired_core] << "  swap_seg(arr[" << beg_tmp << "], " <<
+            (1 << task_exp) << ", " << (task_beg - beg_tmp) << ", " <<
+            (task_beg + mini_task_len - beg_tmp) << ")\n";
+#endif
+        }
+      } else if (MINI_TASK_EXP == task_exp) { // bottom task
+        uint64_t len_tmp = 1 << task_exp;
+        uint64_t task_end = task_beg + len_tmp;
+        if (msg.arr.torswap) {
+          rswap(&arr[task_beg], len_tmp);
+#ifdef DBG
+          oss[desired_core] << "  rswap(arr[" << task_beg << "], " <<
+            len_tmp << ")\n";
+#endif
+        } else {
+          swap(&arr[task_beg], len_tmp);
+#ifdef DBG
+          oss[desired_core] << "  swap(arr[" << task_beg << "], " <<
+            len_tmp << ")\n";
+#endif
+        }
+        // recursive to the bottom
+#ifdef DBG
+        oss[desired_core] << "  recursive_swap(arr[" << task_beg << "], " <<
+          len_tmp << ")\n";
+#endif
+        while (2 < len_tmp) {
+          len_tmp >>= 1;
+          for (uint64_t beg_tmp = task_beg; beg_tmp < task_end;
+               beg_tmp += len_tmp) {
+            swap(&arr[beg_tmp], len_tmp);
+          }
+        }
+      } else { // initial task
+        uint8_t exp_tmp = 0; // sorted length
+        uint64_t task_end = task_beg + mini_task_len;
+        if (len < task_end) {
+          task_end = len;
+        }
+        for (uint64_t beg_tmp = task_beg; task_end > beg_tmp; beg_tmp += 2) {
+          //swap(&arr[beg_tmp], 2);
+          if (arr[beg_tmp] > arr[beg_tmp + 1]) {
+            const int tmp = arr[beg_tmp];
+            arr[beg_tmp] = arr[beg_tmp + 1];
+            arr[beg_tmp + 1] = tmp;
+          }
+        }
+        exp_tmp++;
+        while (MINI_TASK_EXP > exp_tmp) {
+          exp_tmp++;
+          uint64_t len_tmp = 1 << exp_tmp;
+          // first rswap
+          for (uint64_t beg_tmp = task_beg; task_end > beg_tmp;
+               beg_tmp += len_tmp) {
+            rswap(&arr[beg_tmp], len_tmp);
+          }
+          // then recursive swap to the bottom
+          while (2 < len_tmp) {
+            len_tmp >>= 1;
+            for (uint64_t beg_tmp = task_beg; beg_tmp < task_end;
+                 beg_tmp += len_tmp) {
+              swap(&arr[beg_tmp], len_tmp);
+            }
+          }
+        }
+      }
+      line_vl_push_weak(&topair_prod, (uint8_t*)&msg, MSG_SIZE);
+      loaded = false;
+      continue;
+    } // end of loaded
+
+    // did not have a task to do, flush queue then check the done signal
+    line_vl_push_non(&topair_prod, (uint8_t*)&msg, 0);
     done = lock.done;
   }
 }
@@ -182,55 +223,73 @@ void sort(int *arr, const uint64_t len) {
   int errorcode;
   size_t cnt;
   uint64_t task_beg;
-  vlendpt_t topair_cons, toslave_prod, tomaster_cons;
+  uint8_t task_exp;
+  vlendpt_t tosort_prod, topair_cons, tome_cons;
 
   // make vlinks
+  tosort_fd = mkvl();
+  if (0 > tosort_fd) {
+    printf("\033[91mFAILED:\033[0m tosort_fd = mkvl() "
+           "return %d\n", tosort_fd);
+    return;
+  }
   topair_fd = mkvl();
   if (0 > topair_fd) {
     printf("\033[91mFAILED:\033[0m topair_fd = mkvl() "
            "return %d\n", topair_fd);
     return;
   }
-  toslave_fd = mkvl();
-  if (0 > toslave_fd) {
-    printf("\033[91mFAILED:\033[0m toslave_fd = mkvl() "
-           "return %d\n", toslave_fd);
-    return;
-  }
-  tomaster_fd = mkvl();
-  if (0 > tomaster_fd) {
-    printf("\033[91mFAILED:\033[0m tomaster_fd = mkvl() "
-           "return %d\n", tomaster_fd);
+  toexcl_fds = new int[1 + NUM_SLAVES]();
+  toexcl_fds[0] = mkvl();
+  if (0 > toexcl_fds[0]) {
+    printf("\033[91mFAILED:\033[0m toexcl_fds[0] = mkvl() "
+           "return %d\n", toexcl_fds[0]);
     return;
   }
 
   // open endpoints
+  if ((errorcode = open_byte_vl_as_producer(tosort_fd, &tosort_prod, 128))) {
+    printf("\033[91mFAILED:\033[0m open_byte_vl_as_producer(tosort_fd) "
+           "return %d\n", errorcode);
+    return;
+  }
+
   if ((errorcode = open_byte_vl_as_consumer(topair_fd, &topair_cons, 1))) {
-    printf("\033[91mFAILED:\033[0m open_byte_vl_as_producer(toslave_fd) "
+    printf("\033[91mFAILED:\033[0m open_byte_vl_as_consumer(topair_fd) "
            "return %d\n", errorcode);
     return;
   }
 
-  if ((errorcode = open_byte_vl_as_producer(toslave_fd, &toslave_prod, 1))) {
-    printf("\033[91mFAILED:\033[0m open_byte_vl_as_producer(toslave_fd) "
+  if ((errorcode = open_byte_vl_as_consumer(toexcl_fds[0], &tome_cons, 1))) {
+    printf("\033[91mFAILED:\033[0m open_byte_vl_as_consumer(toexcl_fds[0]) "
            "return %d\n", errorcode);
     return;
   }
 
-  if ((errorcode = open_byte_vl_as_consumer(tomaster_fd, &tomaster_cons, 1))) {
-    printf("\033[91mFAILED:\033[0m open_byte_vl_as_consumer(tomaster_fd) "
-           "return %d\n", errorcode);
-    return;
-  }
-
-  // set common info and ready counter before launchgin slave threads
+  // set common info and ready counter before launching slave threads
   arr_base = arr;
   arr_len = len;
   ready = 0;
+#ifdef DBG
+  oss.emplace_back(std::ostringstream::ate);
+#endif
   std::vector<thread> slave_threads;
   for (int i = 0; NUM_SLAVES > i; ++i) {
+#ifdef DBG
+    oss.emplace_back(std::ostringstream::ate);
+#endif
     slave_threads.push_back(thread(slave, core_id++));
   }
+
+  const uint64_t cnt_len = len >> MINI_TASK_EXP;
+  uint8_t *scnts = new uint8_t[cnt_len](); // how long has been sorted
+  // e.g., scnts[2] = 0 means
+  // arr[2<<MINI_TASK_EXP:3<<MINI_TASK_EXP) is in the initial state not sorted
+  // e.g., scnts[4] = 2 + MINI_TASK_EXP means
+  // arr[4<<MINI_TASK_EXP:8<<MINI_TASK_EXP) is sorted
+  uint8_t *dcnts = new uint8_t[cnt_len](); // how long the rswap/swap has done
+  uint8_t *bcnts = new uint8_t[cnt_len](); // how long has touch the bottom
+
   ready++;
   while ((1 + NUM_SLAVES) != ready) { /** spin **/ };
 
@@ -241,91 +300,215 @@ void sort(int *arr, const uint64_t len) {
   m5_reset_stats(0, 0);
 #endif
 
-  // every two elements form a biotonic subarray, ready for swap
   Message<int> msg(arr, len, 0, 2);
   uint64_t feed_in = 0;  // record how long the array has been feed in
-  for (; len > feed_in; feed_in += 2) {
+  uint64_t on_the_fly = 0;
+  msg.arr.exp = 0;
+  const uint64_t mini_task_len = 1 << MINI_TASK_EXP;
+  for (; len > feed_in;) {
+#ifdef DBG
+    oss[0] << "init_feedin " << feed_in << "\n";
+#endif
     msg.arr.beg = feed_in;
-    msg.arr.cnt = 0;
-    if (!line_vl_push_non(&toslave_prod, (uint8_t*)&msg, MSG_SIZE) ||
-        MAX_ON_THE_FLY <= vl_size(&toslave_prod)) {
-      // reach the queue capacity, do the remaining later
+    feed_in += mini_task_len;
+    //msg.arr.end = feed_in;
+    line_vl_push_weak(&tosort_prod, (uint8_t*)&msg, MSG_SIZE);
+    if (MAX_ON_THE_FLY <= ++on_the_fly) {
       break;
     }
-#ifdef DBG
-    oss << "init_feedin " << feed_in << "\n";
-#endif
   }
 
-  uint8_t *pcount = new uint8_t[len](); // count number of pairing
-  uint8_t *lcount = new uint8_t[len](); // count number received as loaded
+  bool msg_valid = false;
   while (true) {
-    // first check if there is any task exclusively for the master
-    line_vl_pop_non(&tomaster_cons, (uint8_t*)&msg, &cnt);
+    // first check if there is any message exclusively for me
+    line_vl_pop_non(&tome_cons, (uint8_t*)&msg, &cnt);
     if (MSG_SIZE == cnt) {
-      task_beg = msg.arr.beg;
-      if (msg.arr.cnt > pcount[task_beg]) {
-        pcount[task_beg] = msg.arr.cnt; // could only increase
 #ifdef DBG
-        oss << "tomaster(pcount[" << task_beg << "]=" <<
-            (uint64_t)pcount[task_beg] << "," <<
-            ((msg.arr.loaded) ? "loaded)\n" : "unloaded)\n");
+      oss[0] << "tomaster(" << msg.arr.beg << "," << (uint64_t)msg.arr.exp <<
+        "," << ((msg.arr.torswap) ? "rswap," : "swap,") <<
+        ((msg.arr.loaded) ? "loaded)\n" : "unloaded)\n");
 #endif
-        if (len == (uint64_t)(1 << pcount[0])) {
-          break; // we are done
-        } else if (!msg.arr.loaded) {
-          if (pair(pcount, task_beg, &task_beg) &&         // paired and
-                   pcount[task_beg] != lcount[task_beg]) { // haven't taken
-            msg.arr.beg = task_beg;
-            msg.arr.cnt = pcount[task_beg];
-#ifdef DBG
-            oss << "toslave(pcount[" << task_beg << "]=" <<
-                (uint64_t)pcount[task_beg] << ")\n";
-#endif
-            line_vl_push_strong(&toslave_prod, (uint8_t*)&msg, MSG_SIZE);
-          }
-        } else { // it is just a report of taken task
-          lcount[task_beg] = msg.arr.cnt;
-        }
-      } // else { // this is an out-of-dated msg
-    } else { // tomaster queue empty, feed in remaining or check topair queue
-      if (len > feed_in && MAX_ON_THE_FLY > vl_size(&toslave_prod)) {
-        msg.arr.beg = feed_in;
-        msg.arr.cnt = 0;
-#ifdef DBG
-        oss << "feedin " << feed_in << "\n";
-#endif
-        line_vl_push_strong(&toslave_prod, (uint8_t*)&msg, MSG_SIZE);
-        feed_in += 2;
+      if (msg.arr.loaded) {
+        // update lcount
       } else {
-        // no remaining array or capacity, check topair queue
-        line_vl_pop_non(&topair_cons, (uint8_t*)&msg, &cnt);
-        if (MSG_SIZE == cnt) {
-          task_beg = msg.arr.beg;
-          if (msg.arr.cnt > pcount[task_beg]) {
-            pcount[task_beg] = msg.arr.cnt; // could only increase
+        msg_valid = true;
+      }
+    }
+
+    // then check topair queue if no valid message to process yet
+    if (!msg_valid) {
+      line_vl_pop_non(&topair_cons, (uint8_t*)&msg, &cnt);
+      if (MSG_SIZE == cnt) {
 #ifdef DBG
-            oss << "topair(pcount[" << task_beg << "]=" <<
-                (uint64_t)pcount[task_beg] << ")\n";
+        oss[0] << "topair(" << msg.arr.beg << "," << (uint64_t)msg.arr.exp <<
+          ((msg.arr.torswap) ? ",rswap)\n" : ",swap)\n");
 #endif
-            if (pair(pcount, task_beg, &task_beg) &&    // paired and
-                pcount[task_beg] != lcount[task_beg]) { // haven't taken
-              msg.arr.beg = task_beg;
-              msg.arr.cnt = pcount[task_beg];
+        msg_valid = true;
+      }
+    }
+
+    // process the message if there is a valid one
+    if (msg_valid) {
+      task_beg = msg.arr.beg;
+      task_exp = msg.arr.exp;
+      if (MINI_TASK_EXP < task_exp) { // not bottom of merge tree
+        // a swap/rswap task may be split, counting all segements form a tree
+        uint8_t cnt = maxdone(dcnts, task_beg >> MINI_TASK_EXP,
+                              task_exp - MINI_TASK_EXP);
+        if ((cnt + MINI_TASK_EXP) == task_exp) { // swap/rswap len reached
 #ifdef DBG
-              oss << "toslave(pcount[" << task_beg << "]=" <<
-                  (uint64_t)pcount[task_beg] << ")\n";
+          oss[0] << "  completed(" << ((task_beg >> task_exp) << task_exp) <<
+            "," << (uint64_t)task_exp <<
+            ((msg.arr.torswap) ? ",rswap)\n" : ",swap)\n");
 #endif
-              line_vl_push_strong(&toslave_prod, (uint8_t*)&msg, MSG_SIZE);
-            }
+          msg.arr.exp = task_exp - 1;
+          msg.arr.torswap = false;
+          task_beg = (task_beg >> task_exp) << task_exp;
+          uint64_t quarter_len = 1 << (task_exp - 2);
+          uint64_t task_end = task_beg + quarter_len;
+#ifdef DBG
+          oss[0] << "  TASK: swap(" << task_beg << ":" << mini_task_len <<
+            ":" << task_end << "," << (uint64_t)msg.arr.exp << ")\n";
+          oss[0] << "  reset dcnts from " << (task_beg >> MINI_TASK_EXP) <<
+            " to " << (task_end >> MINI_TASK_EXP) << "\n";
+#endif
+          // first swap task
+          for (; task_beg < task_end;) {
+            dcnts[task_beg >> MINI_TASK_EXP] = 0;
+            // reset for the new swap task tree
+            msg.arr.beg = task_beg;
+            task_beg += mini_task_len;
+            msg.arr.end = task_beg;
+            line_vl_push_weak(&tosort_prod, (uint8_t*)&msg, MSG_SIZE);
+          }
+          // second swap task
+          task_beg = task_end + quarter_len;
+          task_end = task_beg + quarter_len;
+#ifdef DBG
+          oss[0] << "  TASK: swap(" << task_beg << ":" << mini_task_len <<
+            ":" << task_end << "," << (uint64_t)msg.arr.exp << ")\n";
+          oss[0] << "  reset dcnts from " << (task_beg >> MINI_TASK_EXP) <<
+            " to " << (task_end >> MINI_TASK_EXP) << "\n";
+#endif
+          for (; task_beg < task_end;) {
+            dcnts[task_beg >> MINI_TASK_EXP] = 0;
+            // reset for the new swap task tree
+            msg.arr.beg = task_beg;
+            task_beg += mini_task_len;
+            msg.arr.end = task_beg;
+            line_vl_push_weak(&tosort_prod, (uint8_t*)&msg, MSG_SIZE);
           }
         }
+      } else if (MINI_TASK_EXP == task_exp) { // bottom of merge tree
+        // check if the entire merge tree is done
+        uint64_t sorted_beg;
+        task_exp = maxsorted(scnts, task_beg >> MINI_TASK_EXP, &sorted_beg);
+        uint8_t cnt = maxdone(bcnts, task_beg >> MINI_TASK_EXP,
+                              ++task_exp - MINI_TASK_EXP + 1);
+        if ((cnt + MINI_TASK_EXP - 1) == task_exp) { // merged two sorted
+          task_beg = (task_beg >> task_exp) << task_exp;
+#ifdef DBG
+          oss[0] << "  merged(" << task_beg << ":" <<
+            (task_beg + (1 << task_exp)) << ")\n";
+#endif
+          uint64_t idx_tmp = task_beg >> MINI_TASK_EXP;
+          scnts[idx_tmp]++; // update the maximum sorted array length
+          // check whether the entire array has been sorted or not
+          if ((uint64_t)(1 << scnts[0]) == len) {
+            break;
+          }
+          // try pairing the new sorted array with adjacent sorted array
+          if (ispaired(scnts, idx_tmp, &idx_tmp)) {
+            msg.arr.exp = task_exp + 1;
+            msg.arr.torswap = true;
+            task_beg = idx_tmp << MINI_TASK_EXP;
+#ifdef DBG
+            oss[0] << "    paired(" << task_beg << "," << (task_exp + 1) <<
+              ")\n";
+#endif
+            uint64_t half_len = 1 << (task_exp - MINI_TASK_EXP);
+            uint64_t idx_end = idx_tmp + half_len;
+#ifdef DBG
+            oss[0] << "    TASK: rswap(" << task_beg << ":" << mini_task_len <<
+              ":" << (idx_end << MINI_TASK_EXP) << "," <<
+              (uint64_t)msg.arr.exp << ")\n";
+            oss[0] << "    reset d/bcnts from " << (uint64_t)idx_tmp;
+#endif
+            for (; idx_tmp < idx_end;) {
+              dcnts[idx_tmp] = 0;
+              // reset for the new rswap task tree
+              bcnts[idx_tmp] = 0;
+              // reset for the new merge task tree
+              msg.arr.beg = task_beg;
+              idx_tmp++;
+              task_beg = idx_tmp << MINI_TASK_EXP;
+              msg.arr.end = task_beg;
+              line_vl_push_weak(&tosort_prod, (uint8_t*)&msg, MSG_SIZE);
+            }
+            idx_end = idx_tmp + half_len;
+#ifdef DBG
+            oss[0] << " to " << (uint64_t)idx_tmp << "/" <<
+              (uint64_t)idx_end << "\n";
+#endif
+            for (; idx_tmp < idx_end; ++idx_tmp) {
+              bcnts[idx_tmp] = 0;
+              // reset for the new merge task tree
+            }
+          } // end of ispaired
+        } // end of merged two sorted arrays
+      } else { // 0 == task_exp, only the initial tasks could
+        uint64_t idx_tmp = task_beg >> MINI_TASK_EXP;
+        scnts[idx_tmp] = MINI_TASK_EXP;
+        // check whether the entire array has been sorted or not
+        if ((uint64_t)(1 << scnts[0]) >= len) {
+          break;
+        }
+#ifdef DBG
+        oss[0] << "  inited(" << task_beg << ")\n";
+#endif
+        // try pairing the new sorted array with adjacent sorted array
+        if (ispaired(scnts, idx_tmp, &idx_tmp)) {
+          msg.arr.exp = MINI_TASK_EXP + 1;
+          msg.arr.torswap = true;
+          task_beg = idx_tmp << MINI_TASK_EXP;
+#ifdef DBG
+          oss[0] << "    paired(" << task_beg << ")\n";
+          oss[0] << "    TASK rswap(" << task_beg << "," <<
+            (uint64_t)msg.arr.exp << ")\n";
+          oss[0] << "    reset dcnts[" << (uint64_t)idx_tmp << "], bcnts[" <<
+            (uint64_t)idx_tmp << ":" << (uint64_t)(idx_tmp + 1) << "]\n";
+#endif
+          dcnts[idx_tmp] = 0;
+          // reset for the new rswap task tree
+          bcnts[idx_tmp] = bcnts[idx_tmp + 1] = 0;
+          // reset for the new merge task tree
+          msg.arr.beg = task_beg;
+          msg.arr.end = task_beg + mini_task_len;
+          line_vl_push_weak(&tosort_prod, (uint8_t*)&msg, MSG_SIZE);
+        } // end of ispaired
       }
+      msg_valid = false;
+      continue;
+    } // end of if msg_valid
+
+    // did not process a valid message
+    // remaining initial tasks first then flushing queue
+    if (len > feed_in) {
+      msg.arr.exp = 0;
+      msg.arr.beg = feed_in;
+      //msg.arr.end = feed_in + mini_task_len;
+      if (line_vl_push_non(&tosort_prod, (uint8_t*)&msg, MSG_SIZE)) {
+#ifdef DBG
+        oss[0] << "feedin " << feed_in << "\n";
+#endif
+        feed_in += mini_task_len;
+      }
+    } else {
+      line_vl_push_non(&tosort_prod, (uint8_t*)&msg, 0);
     }
   } // while (true)
 
   lock.done = true; // tell other worker threads we are done
-  delete[] pcount;
 
 #ifndef NOGEM5
   m5_dump_reset_stats(0, 0);
@@ -335,15 +518,22 @@ void sort(int *arr, const uint64_t len) {
   const auto end(high_resolution_clock::now());
   const auto elapsed(duration_cast<nanoseconds>(end - beg));
 
-#ifdef DBG
-  dbg();
-#endif
   std::cout << (end_tsc - beg_tsc) << " ticks elapsed\n";
   std::cout << elapsed.count() << " ns elapsed\n";
+
+  delete[] scnts;
+  delete[] dcnts;
+  delete[] bcnts;
 
   for (int i = NUM_SLAVES - 1; 0 <= i; --i) {
     slave_threads[i].join();
   }
+#ifdef DBG
+  for (int i = 0; NUM_SLAVES >= i; ++i) {
+    dbg(i);
+  }
+  dump(arr, 0); // just to instantiate dump<int>
+#endif
 }
 
 int main(int argc, char *argv[]) {
@@ -356,7 +546,6 @@ int main(int argc, char *argv[]) {
   gen(arr, len);
   fill(&arr[len], len_roundup - len, INT_MAX); // padding
   sort(arr, len_roundup);
-  //dump(arr, len);
   std::cout << std::endl;
   check(arr, len);
   free(arr);

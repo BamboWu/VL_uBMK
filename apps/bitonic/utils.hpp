@@ -1,12 +1,19 @@
 #ifndef _BITONIC_UTILS_HPP__
 #define _BITONIC_UTILS_HPP__
 
+#include <stdint.h>
+#include <iostream>
+
 #ifndef MAX_ON_THE_FLY
 #define MAX_ON_THE_FLY 128
 #endif
 
 #ifndef NUM_SLAVES
 #define NUM_SLAVES 1
+#endif
+
+#ifndef MINI_TASK_EXP
+#define MINI_TASK_EXP 6
 #endif
 
 #define MSG_SIZE 62
@@ -16,9 +23,9 @@ union Message { // Cacheline-size message
   struct {
     T *base;
     uint64_t len;
-    uint64_t beg;
-    uint64_t end;
-    uint8_t cnt; // count number of pairing
+    uint64_t beg; // begin of task segement
+    uint64_t end; // end of task segement
+    uint8_t exp; // indicate swap/rswap task scope length
     bool torswap;
     bool loaded; // scheduled and taken by a slave or not
   } arr;
@@ -43,10 +50,14 @@ union Message { // Cacheline-size message
 /* Check if the array is ascending */
 template <typename T>
 void check(const T *arr, const uint64_t len) {
+#ifdef DBG
+  std::cout << "check(0x" << std::hex << (uint64_t)arr <<
+    std::dec << ", " << len << ")" << std::endl;
+#endif
   for (uint64_t i = 1; len > i; ++i) {
     if (arr[i - 1] > arr[i]) {
       std::cout << "\033[91mERROR: arr[" << (i - 1) << "] = " << arr[i - 1] <<
-        " > arr[" << i << "] = " << arr[i] << "\033[0m\n";
+        " > arr[" << i << "] = " << arr[i] << "\033[0m" << std::endl;
       break;
     }
   }
@@ -95,6 +106,21 @@ void swap(T *arr, const uint64_t len) {
   }
 }
 
+/* Same as swap() but only performed on a segement */
+template <typename T>
+void swap_seg(T *arr, const uint64_t len,
+              const uint64_t beg, const uint64_t end) {
+  const uint64_t half = len >> 1;
+  for (uint64_t i = beg; end > i; ++i) {
+    const uint64_t pair = i + half;
+    if (arr[i] > arr[pair]) {
+      const T tmp = arr[i];
+      arr[i] = arr[pair];
+      arr[pair] = tmp;
+    }
+  }
+}
+
 /* Reverse an array */
 template <typename T>
 void reverse(T *arr, const uint64_t len) {
@@ -113,6 +139,20 @@ template <typename T>
 void rswap(T *arr, const uint64_t len) {
   const uint64_t half = len >> 1;
   for (uint64_t i = 0; half > i; ++i) {
+    const uint64_t pair = len - i - 1;
+    if (arr[i] > arr[pair]) {
+      const T tmp = arr[i];
+      arr[i] = arr[pair];
+      arr[pair] = tmp;
+    }
+  }
+}
+
+/* Same as rswap() but performed only on a segment */
+template <typename T>
+void rswap_seg(T *arr, const uint64_t len,
+               const uint64_t beg, const uint64_t end) {
+  for (uint64_t i = beg; end > i; ++i) {
     const uint64_t pair = len - i - 1;
     if (arr[i] > arr[pair]) {
       const T tmp = arr[i];
@@ -148,13 +188,12 @@ void gen(T *arr, const uint64_t len) {
 }
 
 /* Try to pair two sorted adjacent subarrays */
-template <typename T>
-bool pair(uint8_t *pcount, T beg, T *pidx_1st) {
-  T cnt = pcount[beg];
-  T len_sorted = 1 << cnt;
-  *pidx_1st = (beg >> (cnt + 1)) << (cnt + 1);
-  T idx_2nd = *pidx_1st + len_sorted;
-  return (pcount[*pidx_1st] == pcount[idx_2nd]);
-}
+bool ispaired(uint8_t *scnts, uint64_t idx, uint64_t *pidx_1st);
+
+/* Find the maximum sorted super array */
+uint8_t maxsorted(uint8_t *scnts, uint64_t idx, uint64_t *pidx_1st);
+
+/* Find the maximum completed segement by traversing the tree */
+uint8_t maxdone(uint8_t *dcnts, uint64_t idx, uint8_t max_exp);
 
 #endif

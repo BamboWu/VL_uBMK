@@ -48,7 +48,7 @@ if(NOT VL_FOUND)
 elseif(NOT GCCLIBATOMIC_FOUND)
   MESSAGE(STATUS "WARNING: No atomic library, skip bitonic_vl.")
 else()
-  add_microbenchmark(bitonic_vl vl.cpp)
+  add_microbenchmark(bitonic_vl vl.cpp utils.cpp)
   target_link_libraries(bitonic_vl ${VL_LIBRARY})
   if(NOT Boost_THREAD_FOUND)
     # fall back to use pthread library find in the top CMakeLists.txt

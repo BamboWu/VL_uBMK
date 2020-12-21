@@ -37,6 +37,7 @@ union Message { // Cacheline-size message
     arr.beg = beg;
     arr.end = end;
     arr.torswap = r;
+    arr.loaded = false;
   }
   Message(const Message &rhs) {
     arr.base = rhs.arr.base;

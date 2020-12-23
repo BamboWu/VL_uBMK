@@ -133,15 +133,24 @@ struct zmq_q_t {
   void *in;
   void *out;
   bool push(data_t data) {
-    assert(sizeof(data) == zmq_send(out, &data, sizeof(data), 0));
+    while(0 > zmq_send(out, &data, sizeof(data), ZMQ_DONTWAIT)){
+#ifndef STDTHREAD
+        boost::this_thread::yield();
+#else
+        std::this_thread::yield();
+#endif
+    }
     return true;
   }
   bool pop(data_t &data) {
-    bool valid = false;
-    if (0 < zmq_recv(in, &data, sizeof(data), ZMQ_DONTWAIT)) {
-      valid = true;
+    while (0 > zmq_recv(in, &data, sizeof(data), ZMQ_DONTWAIT)) {
+#ifndef STDTHREAD
+        boost::this_thread::yield();
+#else
+        std::this_thread::yield();
+#endif
     }
-    return valid;
+    return true;
   }
   void open(std::string port, bool isproducer) {
     if (isproducer) {

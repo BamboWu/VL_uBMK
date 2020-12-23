@@ -71,21 +71,11 @@ struct vl_q_t {
     vlendpt_t out;
     bool in_assigned = false;
     bool out_assigned = false;
-    bool push(data_t data) {
+    bool bounded_push(data_t data) {
         uint64_t *tp = (uint64_t*) &data;
         bool valid;
-	while(1){
-            valid = twin_vl_push_non(&in, *tp);
-	    if(valid){
-                break;
-	    }
-#ifndef STDTHREAD
-            boost::this_thread::yield();
-#else
-            std::this_thread::yield();
-#endif
-	}
-        return true;
+        valid = twin_vl_push_non(&in, *tp);
+        return valid;
     }
     void flush(){
         twin_vl_flush(&in);
@@ -93,20 +83,12 @@ struct vl_q_t {
     bool pop(data_t &data) {
         uint64_t temp;
 	bool valid;
-	while(1){
-            twin_vl_pop_non(&out, &temp, &valid);
-	    if(valid){
-                break;
-	    }
-#ifndef STDTHREAD
-            boost::this_thread::yield();
-#else
-            std::this_thread::yield();
-#endif
+        twin_vl_pop_non(&out, &temp, &valid);
+	if(valid){
+            data_t *tp = (data_t*) &temp;
+            data = *tp;
 	}
-        data_t *tp = (data_t*) &temp;
-        data = *tp;
-        return true;
+        return valid;
     }
     void open(int fd, int num_cachelines = 1, bool is_producer = true) {
       if(is_producer){
@@ -132,25 +114,19 @@ void *ctx;
 struct zmq_q_t {
   void *in;
   void *out;
-  bool push(data_t data) {
-    while(0 > zmq_send(out, &data, sizeof(data), ZMQ_DONTWAIT)){
-#ifndef STDTHREAD
-        boost::this_thread::yield();
-#else
-        std::this_thread::yield();
-#endif
+  bool bounded_push(data_t data) {
+    bool valid = true;
+    if (0 > zmq_send(out, &data, sizeof(data), ZMQ_DONTWAIT)){
+        valid = false;
     }
-    return true;
+    return valid;
   }
   bool pop(data_t &data) {
-    while (0 > zmq_recv(in, &data, sizeof(data), ZMQ_DONTWAIT)) {
-#ifndef STDTHREAD
-        boost::this_thread::yield();
-#else
-        std::this_thread::yield();
-#endif
+    bool valid = true;
+    if (0 > zmq_recv(in, &data, sizeof(data), ZMQ_DONTWAIT)) {
+        valid = false;
     }
-    return true;
+    return valid;
   }
   void open(std::string port, bool isproducer) {
     if (isproducer) {
@@ -254,7 +230,13 @@ input_stream(
     while(t_samples--)
     {
         data_t input_data = (data_t)(rand() % 1000);
-        while(!q_out->push(input_data));
+        while(!q_out->bounded_push(input_data)){
+#ifndef STDTHREAD
+            boost::this_thread::yield();
+#else
+            std::this_thread::yield();
+#endif
+	}
     }
 #ifdef VL
     q_out->flush();
@@ -292,8 +274,20 @@ queued_fir(
     while( ready != num_threads ){ /** spin **/ };
     while(t_samples--)
     {
-        while(!q_in->pop(input_data));
-        while(!q_out->push(fir1->filter(input_data)));
+        while(!q_in->pop(input_data)){
+#ifndef STDTHREAD
+            boost::this_thread::yield();
+#else
+            std::this_thread::yield();
+#endif
+	}
+        while(!q_out->bounded_push(fir1->filter(input_data))){
+#ifndef STDTHREAD
+            boost::this_thread::yield();
+#else
+            std::this_thread::yield();
+#endif
+	}
     }
 #ifdef VL
     q_out->flush();
@@ -325,7 +319,13 @@ output_stream(
     while( ready != num_threads ){ /** spin **/ };
     while(t_samples--)
     {
-        while(!q_in->pop(output_data));
+        while(!q_in->pop(output_data)){
+#ifndef STDTHREAD
+            boost::this_thread::yield();
+#else
+            std::this_thread::yield();
+#endif
+	}
 	//std::cout << output_data << std::endl;
     }
     return; 

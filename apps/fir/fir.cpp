@@ -37,7 +37,7 @@
 #include "gem5/m5ops.h"
 #endif
 
-#define NUM_CORES 4 
+#define NUM_CORES 16 
 #define CAPACITY 4096
 #define TAPS_FIR 16
 
@@ -73,7 +73,18 @@ struct vl_q_t {
     bool out_assigned = false;
     bool push(data_t data) {
         uint64_t *tp = (uint64_t*) &data;
-        twin_vl_push_strong(&in, *tp);
+        bool valid;
+	while(1){
+            valid = twin_vl_push_non(&in, *tp);
+	    if(valid){
+                break;
+	    }
+#ifndef STDTHREAD
+            boost::this_thread::yield();
+#else
+            std::this_thread::yield();
+#endif
+	}
         return true;
     }
     void flush(){
@@ -81,7 +92,18 @@ struct vl_q_t {
     }
     bool pop(data_t &data) {
         uint64_t temp;
-        twin_vl_pop_strong(&out, &temp);
+	bool valid;
+	while(1){
+            twin_vl_pop_non(&out, &temp, &valid);
+	    if(valid){
+                break;
+	    }
+#ifndef STDTHREAD
+            boost::this_thread::yield();
+#else
+            std::this_thread::yield();
+#endif
+	}
         data_t *tp = (data_t*) &temp;
         data = *tp;
         return true;
@@ -411,6 +433,7 @@ int main( int argc, char **argv )
         fir_ptr->join();
         fir_ptr++;
     }
+    //fir_ptr->join();
     t_output.join();
 
 #ifndef NOGEM5

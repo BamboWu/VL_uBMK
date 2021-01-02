@@ -364,6 +364,10 @@ main()
         maxtime[j] = MAX(maxtime[j], times[j][k]);
         }
     }
+
+#ifndef NOGEM5
+    m5_dump_reset_stats(0, 0);
+#endif
     
     printf("Function    Best Rate MB/s  Avg time     Min time     Max time\n");
     for (j=0; j<4; j++) {

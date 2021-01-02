@@ -89,21 +89,23 @@ void slave(const int desired_core) {
     printf("\033[91mFAILED:\033[0m %s(), tosort_cons\n", __func__);
     return;
   }
-  if ((errorcode = open_byte_vl_as_producer(topair_fd, &topair_prod, 64))) {
+  if ((errorcode = open_byte_vl_as_producer(topair_fd, &topair_prod,
+          (65536 >> MINI_TASK_EXP) / (NUM_SLAVES + 1)))) {
     printf("\033[91mFAILED:\033[0m %s(), topair_prod\n", __func__);
     return;
   }
 
 #ifdef EXCL_RELOAD
   vlendpt_t tosort_prod;
-  if ((errorcode = open_byte_vl_as_producer(tosort_fd, &tosort_prod, 64))) {
+  if ((errorcode = open_byte_vl_as_producer(tosort_fd, &tosort_prod,
+          (65536 >> MINI_TASK_EXP) / (NUM_SLAVES + 1)))) {
     printf("\033[91mFAILED:\033[0m %s(), tosort_prod\n", __func__);
     return;
   }
 #endif
 
   ready++;
-  while ((1 + NUM_SLAVES) != ready) { /** spin **/ };
+  while ((1 + NUM_SLAVES) != ready.load()) { /** spin **/ };
 
   while (!done) {
     if (!loaded) {
@@ -288,7 +290,8 @@ void sort(int *arr, const uint64_t len) {
   }
 
   // open endpoints
-  if ((errorcode = open_byte_vl_as_producer(tosort_fd, &tosort_prod, 128))) {
+  if ((errorcode = open_byte_vl_as_producer(tosort_fd, &tosort_prod,
+          (65536 >> MINI_TASK_EXP) / (NUM_SLAVES + 1)))) {
     printf("\033[91mFAILED:\033[0m open_byte_vl_as_producer(tosort_fd) "
            "return %d\n", errorcode);
     return;
@@ -325,7 +328,7 @@ void sort(int *arr, const uint64_t len) {
   uint8_t *bcnts = new uint8_t[cnt_len](); // how long has touch the bottom
 
   ready++;
-  while ((1 + NUM_SLAVES) != ready) { /** spin **/ };
+  while ((1 + NUM_SLAVES) != ready.load()) { /** spin **/ };
 
   const uint64_t beg_tsc = rdtsc();
   const auto beg(high_resolution_clock::now());

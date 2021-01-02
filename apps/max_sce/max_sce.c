@@ -13,6 +13,7 @@
 
 #include "threading.h"
 #include "timing.h"
+#include "printmap.h"
 
 #ifndef MAX_LEN
 #define MAX_LEN     16
@@ -109,6 +110,8 @@ void *consumer(void *args) {
 }
 
 int main(int argc, char *argv[]) {
+
+  printmap();
 
 #ifndef NOSCHEDRR
   int priority = sched_get_priority_max(SCHED_RR);

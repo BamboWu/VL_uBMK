@@ -7,6 +7,7 @@ check_function_exists(pthread_setname_np HAS_SET_NAME)
 add_library(uBMK_util STATIC
   threading.c
   profiling.c
+  printmap.cpp
   )
 target_link_libraries(uBMK_util pthread)
 if(PAPI_STATIC_FOUND OR PAPI_DYNAMIC_FOUND)

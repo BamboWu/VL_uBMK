@@ -27,6 +27,10 @@
 #include "vl/vl.h"
 #endif
 
+#ifdef CAF
+#include "caf.h"
+#endif
+
 #ifdef ZMQ
 #include <assert.h>
 #include <zmq.h>
@@ -102,6 +106,30 @@ struct vl_q_t {
 vl_q_t mosi_vl,
        miso_vl;
 
+#endif
+
+#ifdef CAF
+#define MOSI_QID 0
+#define MISO_QID 1
+
+struct caf_q_t {
+  cafendpt_t in;
+  cafendpt_t out;
+  bool push(ball_t ball) { caf_push_strong(&in, ball.val); return true; }
+  bool pop(ball_t &ball) { return caf_pop_non(&out, &ball.val); }
+  void open(int qid) {
+      open_caf(qid, &in);
+      open_caf(qid, &out);
+  }
+  void close() {
+      close_caf(in);
+      close_caf(out);
+  }
+  ~caf_q_t() { close(); }
+};
+
+caf_q_t mosi_caf;
+caf_q_t miso_caf;
 #endif
 
 #ifdef ZMQ
@@ -209,6 +237,9 @@ struct alignas( 64 ) /** align to 64B boundary **/ playerArgs
 #elif M5VL
     m5_q_t              *qmosi  = nullptr;
     m5_q_t              *qmiso  = nullptr;
+#elif CAF
+    caf_q_t             *qmosi  = nullptr;
+    caf_q_t             *qmiso  = nullptr;
 #elif ZMQ
     zmq_q_t             *qmosi  = nullptr;
     zmq_q_t             *qmiso  = nullptr;
@@ -329,6 +360,9 @@ int main( int argc, char **argv )
 #elif M5VL
     mosi_m5.open(1);
     miso_m5.open(2);
+#elif CAF
+    mosi_caf.open(MOSI_QID);
+    miso_caf.open(MISO_QID);
 #endif /** end initiation of VL **/
 
 #ifdef ZMQ
@@ -350,6 +384,9 @@ int main( int argc, char **argv )
 #elif M5VL
     args[0].qmosi   = &mosi_m5;
     args[0].qmiso   = &miso_m5;
+#elif CAF
+    args[0].qmosi   = &mosi_caf;
+    args[0].qmiso   = &miso_caf;
 #elif ZMQ
     args[0].qmosi   = &mosi_zmq;
     args[0].qmiso   = &miso_zmq;
@@ -365,6 +402,9 @@ int main( int argc, char **argv )
 #elif M5VL
     args[1].qmosi   = &mosi_m5;
     args[1].qmiso   = &miso_m5;
+#elif CAF
+    args[1].qmosi   = &mosi_caf;
+    args[1].qmiso   = &miso_caf;
 #elif ZMQ
     args[1].qmosi   = &mosi_zmq;
     args[1].qmiso   = &miso_zmq;

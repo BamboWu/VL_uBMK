@@ -95,7 +95,10 @@ void stage0(int desired_core) {
 #ifdef VL
       line_vl_push_weak(&prod, (uint8_t*)&pkt, HEADER_SIZE);
 #elif CAF
-      memcpy((void*)payload, (void*)&pkt, HEADER_SIZE);
+      memcpy(payload, (void*)&pkt, HEADER_SIZE);
+#ifdef CAF_PREPUSH
+      caf_prepush(payload, HEADER_SIZE);
+#endif
       caf_push_strong(&prod, (uint64_t)payload);
 #endif
       i++;
@@ -160,7 +163,10 @@ void stage1(int desired_core) {
 #ifdef VL
       line_vl_push_weak(&prod, (uint8_t*)&pkt, HEADER_SIZE);
 #elif CAF
-      memcpy((void*)payload, (void*)&pkt, HEADER_SIZE);
+      memcpy(payload, (void*)&pkt, HEADER_SIZE);
+#ifdef CAF_PREPUSH
+      caf_prepush(payload, HEADER_SIZE);
+#endif
       caf_push_strong(&prod, (uint64_t)payload);
 #endif
       continue;
@@ -225,7 +231,10 @@ void stage2(int desired_core) {
 #ifdef VL
       line_vl_push_weak(&prod, (uint8_t*)&pkt, HEADER_SIZE);
 #elif CAF
-      memcpy((void*)payload, (void*)&pkt, HEADER_SIZE);
+      memcpy(payload, (void*)&pkt, HEADER_SIZE);
+#ifdef CAF_PREPUSH
+      caf_prepush(payload, HEADER_SIZE);
+#endif
       caf_push_strong(&prod, (uint64_t)payload);
 #endif
       continue;

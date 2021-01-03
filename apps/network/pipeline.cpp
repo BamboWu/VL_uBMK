@@ -5,6 +5,7 @@
 #include <vector>
 #include <stdlib.h>
 #include <stdint.h>
+#include <string.h>
 
 #include "threading.h"
 #include "timing.h"
@@ -21,6 +22,8 @@ using std::chrono::nanoseconds;
 
 #ifdef VL
 #include "vl/vl.h"
+#elif CAF
+#include "caf.h"
 #endif
 
 int q01 = 1; // id for the queue connecting stage 0 and stage 1, 1:N
@@ -39,23 +42,34 @@ union {
 void stage0(int desired_core) {
   setAffinity(desired_core);
 
-  int errorcode;
-  size_t cnt;
+  size_t cnt = 0;
   Packet pkt;
   bool valid;
-  void *payload;
+  void *payload = NULL;
 
 #ifdef VL
   vlendpt_t cons, prod;
   // open endpoints
-  if ((errorcode = open_byte_vl_as_consumer(q30, &cons, 1))) {
+  if (open_byte_vl_as_consumer(q30, &cons, 1)) {
     printf("\033[91mFAILED:\033[0m %s(), T%d cons\n", __func__, desired_core);
     return;
   }
-  if ((errorcode = open_byte_vl_as_producer(q01, &prod, 1))) {
+  if (open_byte_vl_as_producer(q01, &prod, 1)) {
     printf("\033[91mFAILED:\033[0m %s(), T%d prod\n", __func__, desired_core);
     return;
   }
+#elif CAF
+  cafendpt_t cons, prod;
+  // open endpoints
+  if (open_caf(q30, &cons)) {
+    printf("\033[91mFAILED:\033[0m %s(), T%d cons\n", __func__, desired_core);
+    return;
+  }
+  if (open_caf(q01, &prod)) {
+    printf("\033[91mFAILED:\033[0m %s(), T%d prod\n", __func__, desired_core);
+    return;
+  }
+  cnt = cnt;
 #endif
 
   ready++;
@@ -66,6 +80,8 @@ void stage0(int desired_core) {
 #ifdef VL
     line_vl_pop_non(&cons, (uint8_t*)&payload, &cnt);
     valid = (sizeof(void *) == cnt);
+#elif CAF
+    valid = caf_pop_non(&cons, (uint64_t*)&payload);
 #endif
 
     if (valid) { // payload now points to a 2MB memory from pool
@@ -78,6 +94,9 @@ void stage0(int desired_core) {
       pkt.checksumTCP = pkt.srcPort ^ pkt.dstPort;
 #ifdef VL
       line_vl_push_weak(&prod, (uint8_t*)&pkt, HEADER_SIZE);
+#elif CAF
+      memcpy((void*)payload, (void*)&pkt, HEADER_SIZE);
+      caf_push_strong(&prod, (uint64_t)payload);
 #endif
       i++;
       continue;
@@ -93,23 +112,36 @@ void stage0(int desired_core) {
 void stage1(int desired_core) {
   setAffinity(desired_core);
 
-  int errorcode;
-  size_t cnt;
+  size_t cnt = 0;
   Packet pkt;
   bool valid;
   bool done = false;
+  void *payload = NULL;
 
 #ifdef VL
   vlendpt_t cons, prod;
   // open endpoints
-  if ((errorcode = open_byte_vl_as_consumer(q01, &cons, 1))) {
+  if (open_byte_vl_as_consumer(q01, &cons, 1)) {
     printf("\033[91mFAILED:\033[0m %s(), T%d cons\n", __func__, desired_core);
     return;
   }
-  if ((errorcode = open_byte_vl_as_producer(q12, &prod, 1))) {
+  if (open_byte_vl_as_producer(q12, &prod, 1)) {
     printf("\033[91mFAILED:\033[0m %s(), T%d prod\n", __func__, desired_core);
     return;
   }
+  payload = payload;
+#elif CAF
+  cafendpt_t cons, prod;
+  // open endpoints
+  if (open_caf(q01, &cons)) {
+    printf("\033[91mFAILED:\033[0m %s(), T%d cons\n", __func__, desired_core);
+    return;
+  }
+  if (open_caf(q12, &prod)) {
+    printf("\033[91mFAILED:\033[0m %s(), T%d prod\n", __func__, desired_core);
+    return;
+  }
+  cnt = cnt;
 #endif
 
   ready++;
@@ -120,11 +152,16 @@ void stage1(int desired_core) {
 #ifdef VL
     line_vl_pop_non(&cons, (uint8_t*)&pkt, &cnt);
     valid = (HEADER_SIZE == cnt);
+#elif CAF
+    valid = caf_pop_non(&cons, (uint64_t*)&payload);
 #endif
 
     if (valid) { // pkt is valid
 #ifdef VL
       line_vl_push_weak(&prod, (uint8_t*)&pkt, HEADER_SIZE);
+#elif CAF
+      memcpy((void*)payload, (void*)&pkt, HEADER_SIZE);
+      caf_push_strong(&prod, (uint64_t)payload);
 #endif
       continue;
     }
@@ -140,23 +177,36 @@ void stage1(int desired_core) {
 void stage2(int desired_core) {
   setAffinity(desired_core);
 
-  int errorcode;
-  size_t cnt;
+  size_t cnt = 0;
   Packet pkt;
   bool valid;
   bool done = false;
+  void *payload = NULL;
 
 #ifdef VL
   vlendpt_t cons, prod;
   // open endpoints
-  if ((errorcode = open_byte_vl_as_consumer(q12, &cons, 1))) {
+  if (open_byte_vl_as_consumer(q12, &cons, 1)) {
     printf("\033[91mFAILED:\033[0m %s(), T%d cons\n", __func__, desired_core);
     return;
   }
-  if ((errorcode = open_byte_vl_as_producer(q23, &prod, 1))) {
+  if (open_byte_vl_as_producer(q23, &prod, 1)) {
     printf("\033[91mFAILED:\033[0m %s(), T%d prod\n", __func__, desired_core);
     return;
   }
+  payload = payload;
+#elif CAF
+  cafendpt_t cons, prod;
+  // open endpoints
+  if (open_caf(q01, &cons)) {
+    printf("\033[91mFAILED:\033[0m %s(), T%d cons\n", __func__, desired_core);
+    return;
+  }
+  if (open_caf(q12, &prod)) {
+    printf("\033[91mFAILED:\033[0m %s(), T%d prod\n", __func__, desired_core);
+    return;
+  }
+  cnt = cnt;
 #endif
 
   ready++;
@@ -167,11 +217,16 @@ void stage2(int desired_core) {
 #ifdef VL
     line_vl_pop_non(&cons, (uint8_t*)&pkt, &cnt);
     valid = (HEADER_SIZE == cnt);
+#elif CAF
+    valid = caf_pop_non(&cons, (uint64_t*)&payload);
 #endif
 
     if (valid) { // pkt is valid
 #ifdef VL
       line_vl_push_weak(&prod, (uint8_t*)&pkt, HEADER_SIZE);
+#elif CAF
+      memcpy((void*)payload, (void*)&pkt, HEADER_SIZE);
+      caf_push_strong(&prod, (uint64_t)payload);
 #endif
       continue;
     }
@@ -190,7 +245,7 @@ int main(int argc, char *argv[]) {
 
   int core_id = 1;
   Packet pkt;
-  size_t cnt;
+  size_t cnt = 0;
   bool valid;
 
   if (1 < argc) {
@@ -230,6 +285,17 @@ int main(int argc, char *argv[]) {
     printf("\033[91mFAILED:\033[0m %s(), prod\n", __func__);
     return -1;
   }
+#elif CAF
+  cafendpt_t cons, prod;
+  if (open_caf(q23, &cons)) {
+    printf("\033[91mFAILED:\033[0m %s(), cons\n", __func__);
+    return -1;
+  }
+  if (open_caf(q30, &prod)) {
+    printf("\033[91mFAILED:\033[0m %s(), prod\n", __func__);
+    return -1;
+  }
+  cnt = cnt;
 #endif
 
   ready = 0;
@@ -249,6 +315,8 @@ int main(int argc, char *argv[]) {
     void *payload = (void *)((uint64_t)mempool + (i << 21));
 #ifdef VL
     line_vl_push_strong(&prod, (uint8_t*)&payload, sizeof(void *));
+#elif CAF
+    caf_push_strong(&prod, (uint64_t)payload);
 #endif
   }
 
@@ -267,11 +335,16 @@ int main(int argc, char *argv[]) {
 #ifdef VL
     line_vl_pop_non(&cons, (uint8_t*)&pkt, &cnt);
     valid = (HEADER_SIZE == cnt);
+#elif CAF
+    valid = caf_pop_non(&cons, (uint64_t*)&pkt.payload);
 #endif
 
     if (valid) { // payload now points to a 2MB memory from pool
 #ifdef VL
       line_vl_push_weak(&prod, (uint8_t*)&pkt.payload, sizeof(void *));
+#elif CAF
+      //memcpy((void*)pkt, pkt->payload, HEADER_SIZE);
+      caf_push_strong(&prod, (uint64_t)pkt.payload);
 #endif
       i++;
       continue;

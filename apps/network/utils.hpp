@@ -40,6 +40,6 @@ struct Packet {
     uint16_t urgentPtr;
     // payload
     void * payload;
-};
+} __attribute__((packed));
 
 #endif // end of ifndef _NETWORK_UTILS_HPP__

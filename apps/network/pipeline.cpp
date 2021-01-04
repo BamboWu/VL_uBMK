@@ -204,11 +204,11 @@ void stage2(int desired_core) {
 #elif CAF
   cafendpt_t cons, prod;
   // open endpoints
-  if (open_caf(q01, &cons)) {
+  if (open_caf(q12, &cons)) {
     printf("\033[91mFAILED:\033[0m %s(), T%d cons\n", __func__, desired_core);
     return;
   }
-  if (open_caf(q12, &prod)) {
+  if (open_caf(q23, &prod)) {
     printf("\033[91mFAILED:\033[0m %s(), T%d prod\n", __func__, desired_core);
     return;
   }

@@ -15,7 +15,7 @@
 #define POOL_SIZE 16 // #2MB packets
 #endif
 
-#define HEADER_SIZE 44
+#define HEADER_SIZE 48
 
 struct Packet {
     // IPv4 header
@@ -27,13 +27,13 @@ struct Packet {
     uint8_t TTL;
     uint8_t protocol;
     uint16_t checksumIP;
-    uint64_t srcIP;
-    uint64_t dstIP;
+    uint32_t srcIP;
+    uint32_t dstIP;
     // TCP header
     uint16_t srcPort;
     uint16_t dstPort;
-    uint64_t seqNum;
-    uint64_t ackNum;
+    uint32_t seqNum;
+    uint32_t ackNum;
     uint16_t flagsTCP;
     uint16_t winSize;
     uint16_t checksumTCP;
@@ -41,5 +41,9 @@ struct Packet {
     // payload
     void * payload;
 } __attribute__((packed));
+
+#define STATIC_ASSERT(COND,MSG) typedef char static_assert_##MSG[(COND)?1:-1]
+
+STATIC_ASSERT(HEADER_SIZE == sizeof(Packet), PacketSize);
 
 #endif // end of ifndef _NETWORK_UTILS_HPP__

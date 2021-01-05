@@ -192,9 +192,6 @@ void stage1(int desired_core) {
     }
 
     done = lock.done;
-#ifdef VL
-    line_vl_push_non(&prod, (uint8_t*)ppkt, 0); // help flushing
-#endif
   }
 
 }
@@ -281,9 +278,6 @@ void stage2(int desired_core) {
     }
 
     done = lock.done;
-#ifdef VL
-    line_vl_push_non(&prod, (uint8_t*)ppkt, 0); // help flushing
-#endif
   }
 
 }
@@ -334,6 +328,7 @@ int main(int argc, char *argv[]) {
     printf("\033[91mFAILED:\033[0m %s(), prod\n", __func__);
     return -1;
   }
+  ppkt = new Packet();
 #elif CAF
   cafendpt_t cons, prod;
   if (open_caf(q23, &cons)) {
@@ -382,13 +377,8 @@ int main(int argc, char *argv[]) {
   for (uint64_t i = 0; num_packets > i;) {
     // try to acquire a packet
 #ifdef VL
-    if (NULL == ppkt) { // get local buffer in producer cacheline first
-      ppkt = (Packet*)vl_allocate(&prod, HEADER_SIZE);
-    }
-    if (NULL != ppkt) { // have the local buffer
-      line_vl_pop_non(&cons, (uint8_t*)ppkt, &cnt); // pop directly into prod
-      valid = (HEADER_SIZE == cnt);
-    }
+    line_vl_pop_non(&cons, (uint8_t*)ppkt, &cnt);
+    valid = (HEADER_SIZE == cnt);
 #elif CAF
     valid = caf_pop_non(&cons, (uint64_t*)&ppkt);
 #endif

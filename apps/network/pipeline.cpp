@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
+#include <assert.h>
 
 #include "threading.h"
 #include "timing.h"
@@ -43,8 +44,7 @@ void stage0(int desired_core) {
   setAffinity(desired_core);
 
   size_t cnt = 0;
-  bool valid;
-  Packet *ppkt = NULL;
+  Packet *pkts[BULK_SIZE] = { NULL };
 
 #ifdef VL
   vlendpt_t cons, prod;
@@ -68,43 +68,48 @@ void stage0(int desired_core) {
     printf("\033[91mFAILED:\033[0m %s(), T%d prod\n", __func__, desired_core);
     return;
   }
-  cnt = cnt;
 #endif
 
   ready++;
   while ((2 + NUM_STAGE1 + NUM_STAGE2) != ready.load()) { /** spin **/ };
 
   for (uint64_t i = 0; num_packets > i;) {
-    // try to acquire a 2MB memory from pool
+    // try to acquire packet header points from pool
 #ifdef VL
-    line_vl_pop_non(&cons, (uint8_t*)&ppkt, &cnt);
-    valid = (sizeof(void *) == cnt);
+    line_vl_pop_non(&cons, (uint8_t*)pkts, &cnt);
+    cnt /= sizeof(Packet*);
 #elif CAF
-    valid = caf_pop_non(&cons, (uint64_t*)&ppkt);
+    cnt = caf_pop_bulk(&cons, (uint64_t*)pkts, BULK_SIZE);
 #endif
 
-    if (valid) { // ppkt now points to a 2MB memory from pool
-      ppkt->payload = (void*)ppkt;
-      ppkt->srcIP = i;
-      ppkt->dstIP = ~i;
-      ppkt->checksumIP = ppkt->srcIP ^ ppkt->dstIP;
-      ppkt->srcPort = (uint16_t)num_packets;
-      ppkt->dstPort = (uint16_t)num_packets;
-      ppkt->checksumTCP = ppkt->srcPort ^ ppkt->dstPort;
-#ifdef VL
-      line_vl_push_weak(&prod, (uint8_t*)ppkt, HEADER_SIZE);
-#elif CAF
+    if (cnt) { // pkts now have valid pointers
+      for (uint64_t j = 0; cnt > j; ++j) {
+        pkts[j]->ipheader.data.srcIP = i + j;
+        pkts[j]->ipheader.data.dstIP = ~i;
+        pkts[j]->ipheader.data.checksumIP =
+          pkts[j]->ipheader.data.srcIP ^ pkts[j]->ipheader.data.dstIP;
+        pkts[j]->tcpheader.data.srcPort = (uint16_t)num_packets;
+        pkts[j]->tcpheader.data.dstPort = (uint16_t)num_packets;
+        pkts[j]->tcpheader.data.checksumTCP =
+          pkts[j]->tcpheader.data.srcPort ^ pkts[j]->tcpheader.data.dstPort;
 #ifdef CAF_PREPUSH
-      caf_prepush((void*)ppkt, HEADER_SIZE);
+        caf_prepush((void*)pkts[j], HEADER_SIZE);
 #endif
-      caf_push_strong(&prod, (uint64_t)ppkt);
+      }
+#ifdef VL
+      line_vl_push_weak(&prod, (uint8_t*)pkts, cnt * sizeof(Packet*));
+#elif CAF
+      uint64_t j = 0; // successfully pushed count
+      do {
+        j += caf_push_bulk(&prod, (uint64_t*)&pkts[j], cnt - j);
+      } while (j < cnt);
 #endif
-      i++;
+      i += cnt;
       continue;
     }
 
 #ifdef VL
-    line_vl_push_non(&prod, (uint8_t*)ppkt, 0); // help flushing
+    line_vl_push_non(&prod, (uint8_t*)pkts, 0); // help flushing
 #endif
   }
 
@@ -116,9 +121,8 @@ void stage1(int desired_core) {
   uint16_t checksum = 0;
   uint64_t corrupted = 0;
   size_t cnt = 0;
-  bool valid = false;
   bool done = false;
-  Packet *ppkt = NULL;
+  Packet *pkts[BULK_SIZE] = { NULL };
 
   // get rid of unused warning
   checksum = checksum;
@@ -146,7 +150,6 @@ void stage1(int desired_core) {
     printf("\033[91mFAILED:\033[0m %s(), T%d prod\n", __func__, desired_core);
     return;
   }
-  cnt = cnt; // CAF does not use cnt
 #endif
 
   ready++;
@@ -155,39 +158,38 @@ void stage1(int desired_core) {
   while (!done) {
     // try to acquire a packet
 #ifdef VL
-    if (NULL == ppkt) { // get local buffer in producer cacheline first
-      ppkt = (Packet*)vl_allocate(&prod, HEADER_SIZE);
-    }
-    if (NULL != ppkt) { // have the local buffer
-      line_vl_pop_non(&cons, (uint8_t*)ppkt, &cnt); // pop directly into prod
-      valid = (HEADER_SIZE == cnt);
-    }
+    line_vl_pop_non(&cons, (uint8_t*)pkts, &cnt);
+    cnt /= sizeof(Packet*);
 #elif CAF
-    valid = caf_pop_non(&cons, (uint64_t*)&ppkt);
+    cnt = caf_pop_bulk(&cons, (uint64_t*)pkts, BULK_SIZE);
 #endif
 
-    if (valid) { // pkt is valid
-      // ready to access ppkt to process header information
+    if (cnt) { // pkts has valid pointers
+      // process header information
+      for (uint64_t i = 0; cnt > i; ++i) {
 #ifdef STAGE1_READ
-      if (ppkt->checksumIP != (ppkt->srcIP ^ ppkt->dstIP)) {
-        corrupted++;
-      }
+        if (pkts[i]->ipheader.data.checksumIP !=
+            (pkts[i]->ipheader.data.srcIP ^ pkts[i]->ipheader.data.dstIP)) {
+          corrupted++;
+        }
 #endif
 #ifdef STAGE1_WRITE
-      ppkt->checksumIP = (uint16_t)corrupted;
+        pkts[i]->ipheader.data.checksumIP = (uint16_t)corrupted;
 #endif
+#ifdef CAF_PREPUSH
+        caf_prepush((void*)pkts[i], HEADER_SIZE);
+#endif
+      }
 
       // after processing, propogate the packet to the next stage
 #ifdef VL
-      line_vl_push_non(&prod, (uint8_t*)ppkt, 0); // trigger the flush
-      ppkt = NULL;
+      line_vl_push_weak(&prod, (uint8_t*)pkts, cnt * sizeof(Packet*));
 #elif CAF
-#ifdef CAF_PREPUSH
-      caf_prepush((void*)ppkt, HEADER_SIZE);
+      uint64_t i = 0; // sucessufully pushed count
+      do {
+        i += caf_push_bulk(&prod, (uint64_t*)&pkts[i], cnt - i);
+      } while (i < cnt);
 #endif
-      caf_push_strong(&prod, (uint64_t)ppkt);
-#endif
-      valid = false;
       continue;
     }
 
@@ -202,9 +204,8 @@ void stage2(int desired_core) {
   uint16_t checksum = 0;
   uint64_t corrupted = 0;
   size_t cnt = 0;
-  bool valid;
   bool done = false;
-  Packet *ppkt = NULL;
+  Packet *pkts[BULK_SIZE] = { NULL };
 
   // get rid of unused warning
   checksum = checksum;
@@ -232,7 +233,6 @@ void stage2(int desired_core) {
     printf("\033[91mFAILED:\033[0m %s(), T%d prod\n", __func__, desired_core);
     return;
   }
-  cnt = cnt;
 #endif
 
   ready++;
@@ -241,39 +241,39 @@ void stage2(int desired_core) {
   while (!done) {
     // try to acquire a packet
 #ifdef VL
-    if (NULL == ppkt) { // get local buffer in producer cacheline first
-      ppkt = (Packet*)vl_allocate(&prod, HEADER_SIZE);
-    }
-    if (NULL != ppkt) { // have the local buffer
-      line_vl_pop_non(&cons, (uint8_t*)ppkt, &cnt); // pop directly into prod
-      valid = (HEADER_SIZE == cnt);
-    }
+    line_vl_pop_non(&cons, (uint8_t*)pkts, &cnt);
+    cnt /= sizeof(Packet*);
 #elif CAF
-    valid = caf_pop_non(&cons, (uint64_t*)&ppkt);
+    cnt = caf_pop_bulk(&cons, (uint64_t*)pkts, BULK_SIZE);
 #endif
 
-    if (valid) { // pkt is valid
-      // ready to access ppkt to process header information
+    if (cnt) { // pkts has valid pointers
+      // process header information
+      for (uint64_t i = 0; cnt > i; ++i) {
 #ifdef STAGE2_READ
-      if (ppkt->checksumTCP != (ppkt->srcPort ^ ppkt->dstPort)) {
-        corrupted++;
-      }
+        if (pkts[i]->tcpheader.data.checksumTCP !=
+            (pkts[i]->tcpheader.data.srcPort ^
+             pkts[i]->tcpheader.data.dstPort)) {
+          corrupted++;
+        }
 #endif
 #ifdef STAGE2_WRITE
-      ppkt->checksumTCP = (uint16_t)corrupted;
+        pkts[i]->tcpheader.data.checksumTCP = (uint16_t)corrupted;
 #endif
+#ifdef CAF_PREPUSH
+        caf_prepush((void*)pkts[i], HEADER_SIZE);
+#endif
+      }
 
       // after processing, propogate the packet to the next stage
 #ifdef VL
-      line_vl_push_non(&prod, (uint8_t*)ppkt, 0); // trigger the flush
-      ppkt = NULL;
+      line_vl_push_weak(&prod, (uint8_t*)pkts, cnt * sizeof(Packet*));
 #elif CAF
-#ifdef CAF_PREPUSH
-      caf_prepush((void*)ppkt, HEADER_SIZE);
+      uint64_t i = 0; // sucessufully pushed count
+      do {
+        i += caf_push_bulk(&prod, (uint64_t*)&pkts[i], cnt - i);
+      } while (i < cnt);
 #endif
-      caf_push_strong(&prod, (uint64_t)ppkt);
-#endif
-      valid = false;
       continue;
     }
 
@@ -288,14 +288,13 @@ int main(int argc, char *argv[]) {
 
   int core_id = 1;
   size_t cnt = 0;
-  bool valid;
-  Packet *ppkt = NULL;
+  Packet *pkts[BULK_SIZE] = { NULL };
 
   if (1 < argc) {
     num_packets = atoi(argv[1]);
   }
-  printf("%s 1-%d-%d-1 %lu pkts %d pool\n",
-         argv[0], NUM_STAGE1, NUM_STAGE2, num_packets, POOL_SIZE);
+  printf("%s 1-%d-%d-1 %d bulk %lu pkts %d pool\n",
+         argv[0], NUM_STAGE1, NUM_STAGE2, BULK_SIZE, num_packets, POOL_SIZE);
 
 #ifdef VL
   q01 = mkvl();
@@ -328,7 +327,6 @@ int main(int argc, char *argv[]) {
     printf("\033[91mFAILED:\033[0m %s(), prod\n", __func__);
     return -1;
   }
-  ppkt = new Packet();
 #elif CAF
   cafendpt_t cons, prod;
   if (open_caf(q23, &cons)) {
@@ -352,16 +350,23 @@ int main(int argc, char *argv[]) {
     slave_threads.push_back(thread(stage2, core_id++));
   }
 
-  void *mempool = malloc(POOL_SIZE << 21); // POOL_SIZE 2MB memory blocks
+  void *mempool = malloc(POOL_SIZE << 11); // POOL_SIZE 2KB memory blocks
+  void *headerpool = malloc(POOL_SIZE * HEADER_SIZE);
 
   // add allocated memory blocks into pool
-  for (int i = 0; POOL_SIZE > i; ++i) {
-    void *payload = (void *)((uint64_t)mempool + (i << 21));
+  for (int i = 0; POOL_SIZE > i;) {
+    size_t j = 0;
+    while (BULK_SIZE > j && POOL_SIZE > i) {
+      pkts[j] = (Packet*)((uint64_t)headerpool + (i * HEADER_SIZE));
+      pkts[j]->payload = (void*)((uint64_t)mempool + (i << 11));
+      j++;
+    }
 #ifdef VL
-    line_vl_push_strong(&prod, (uint8_t*)&payload, sizeof(void *));
+    line_vl_push_strong(&prod, (uint8_t*)pkts, sizeof(Packet*) * j);
 #elif CAF
-    caf_push_strong(&prod, (uint64_t)payload);
+    assert(j == caf_push_bulk(&prod, (uint64_t*)pkts, j));
 #endif
+    i += j;
   }
 
   while ((1 + NUM_STAGE1 + NUM_STAGE2) != ready.load()) { /** spin **/ };
@@ -377,25 +382,27 @@ int main(int argc, char *argv[]) {
   for (uint64_t i = 0; num_packets > i;) {
     // try to acquire a packet
 #ifdef VL
-    line_vl_pop_non(&cons, (uint8_t*)ppkt, &cnt);
-    valid = (HEADER_SIZE == cnt);
+    line_vl_pop_non(&cons, (uint8_t*)pkts, &cnt);
 #elif CAF
-    valid = caf_pop_non(&cons, (uint64_t*)&ppkt);
+    cnt = caf_pop_bulk(&cons, (uint64_t*)pkts, BULK_SIZE);
 #endif
 
-    if (valid) { // ppkt valid
+    if (cnt) { // valid packets pointers in pkts
 #ifdef VL
-      line_vl_push_weak(&prod, (uint8_t*)&(ppkt->payload), sizeof(void *));
+      line_vl_push_weak(&prod, (uint8_t*)pkts, cnt);
+      cnt /= sizeof(Packet*);
 #elif CAF
-      caf_push_strong(&prod, (uint64_t)ppkt);
+      uint64_t j = 0; // successfully pushed count
+      do {
+        j += caf_push_bulk(&prod, (uint64_t*)&pkts[j], cnt - j);
+      } while (j < cnt);
 #endif
-      i++;
-      valid = false;
+      i += cnt;
       continue;
     }
 
 #ifdef VL
-    line_vl_push_non(&prod, (uint8_t*)ppkt, 0); // help flushing
+    line_vl_push_non(&prod, (uint8_t*)pkts, 0); // help flushing
 #endif
   }
 

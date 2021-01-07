@@ -57,6 +57,7 @@ void stage0(int desired_core) {
     printf("\033[91mFAILED:\033[0m %s(), T%d prod\n", __func__, desired_core);
     return;
   }
+  const size_t bulk_size = BULK_SIZE * sizeof(Packet*);
 #elif CAF
   cafendpt_t cons, prod;
   // open endpoints
@@ -76,6 +77,7 @@ void stage0(int desired_core) {
   for (uint64_t i = 0; num_packets > i;) {
     // try to acquire packet header points from pool
 #ifdef VL
+    cnt = bulk_size;
     line_vl_pop_non(&cons, (uint8_t*)pkts, &cnt);
     cnt /= sizeof(Packet*);
 #elif CAF
@@ -139,6 +141,7 @@ void stage1(int desired_core) {
     printf("\033[91mFAILED:\033[0m %s(), T%d prod\n", __func__, desired_core);
     return;
   }
+  const size_t bulk_size = BULK_SIZE * sizeof(Packet*);
 #elif CAF
   cafendpt_t cons, prod;
   // open endpoints
@@ -158,6 +161,7 @@ void stage1(int desired_core) {
   while (!done) {
     // try to acquire a packet
 #ifdef VL
+    cnt = bulk_size;
     line_vl_pop_non(&cons, (uint8_t*)pkts, &cnt);
     cnt /= sizeof(Packet*);
 #elif CAF
@@ -222,6 +226,7 @@ void stage2(int desired_core) {
     printf("\033[91mFAILED:\033[0m %s(), T%d prod\n", __func__, desired_core);
     return;
   }
+  const size_t bulk_size = BULK_SIZE * sizeof(Packet*);
 #elif CAF
   cafendpt_t cons, prod;
   // open endpoints
@@ -241,6 +246,7 @@ void stage2(int desired_core) {
   while (!done) {
     // try to acquire a packet
 #ifdef VL
+    cnt = bulk_size;
     line_vl_pop_non(&cons, (uint8_t*)pkts, &cnt);
     cnt /= sizeof(Packet*);
 #elif CAF
@@ -327,6 +333,7 @@ int main(int argc, char *argv[]) {
     printf("\033[91mFAILED:\033[0m %s(), prod\n", __func__);
     return -1;
   }
+  const size_t bulk_size = BULK_SIZE * sizeof(Packet*);
 #elif CAF
   cafendpt_t cons, prod;
   if (open_caf(q23, &cons)) {
@@ -337,7 +344,6 @@ int main(int argc, char *argv[]) {
     printf("\033[91mFAILED:\033[0m %s(), prod\n", __func__);
     return -1;
   }
-  cnt = cnt;
 #endif
 
   ready = 0;
@@ -382,6 +388,7 @@ int main(int argc, char *argv[]) {
   for (uint64_t i = 0; num_packets > i;) {
     // try to acquire a packet
 #ifdef VL
+    cnt = bulk_size;
     line_vl_pop_non(&cons, (uint8_t*)pkts, &cnt);
 #elif CAF
     cnt = caf_pop_bulk(&cons, (uint64_t*)pkts, BULK_SIZE);

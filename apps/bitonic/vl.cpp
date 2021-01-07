@@ -110,6 +110,7 @@ void slave(const int desired_core) {
   while (!done) {
     if (!loaded) {
       // try getting a sorting task scheduled
+      cnt = MSG_SIZE;
       line_vl_pop_non(&tosort_cons, (uint8_t*)&msg, &cnt);
       if (MSG_SIZE == cnt) { // get a sorting task
         loaded = true;
@@ -358,6 +359,7 @@ void sort(int *arr, const uint64_t len) {
   bool msg_valid = false;
   while (true) {
     // check if there is any message to pair
+    cnt = MSG_SIZE;
     line_vl_pop_non(&topair_cons, (uint8_t*)&msg, &cnt);
     if (MSG_SIZE == cnt) {
 #ifdef DBG

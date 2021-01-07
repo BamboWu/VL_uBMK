@@ -28,8 +28,8 @@ else()
   target_link_libraries(pipeline_vl ${VL_LIBRARY})
   add_microbenchmark(firewall_vl firewall.cpp)
   target_compile_definitions(firewall_vl PRIVATE -DVL
-                             -DNUM_STAGE1=4 -DNUM_STAGE2=4
-                             -DSTAGE2_READ -DSTAGE2_WRITE
+                             -DNUM_STAGE2=4
+                             -DCORRECT_READ -DCORRECT_WRITE
                              -DBULK_SIZE=7 -DPOOL_SIZE=56)
   target_link_libraries(firewall_vl ${VL_LIBRARY})
 endif()
@@ -63,15 +63,15 @@ else()
 
   add_microbenchmark(firewall_qmd firewall.cpp)
   target_compile_definitions(firewall_qmd PRIVATE -DCAF=1
-                             -DNUM_STAGE1=4 -DNUM_STAGE2=4
-                             -DSTAGE2_READ -DSTAGE2_WRITE
+                             -DNUM_STAGE2=4
+                             -DCORRECT_READ -DCORRECT_WRITE
                              -DBULK_SIZE=8 -DPOOL_SIZE=56)
   target_link_libraries(firewall_qmd ${CAF_LIBRARY})
 
   add_microbenchmark(firewall_caf firewall.cpp)
   target_compile_definitions(firewall_caf PRIVATE -DCAF=1 -DCAF_PREPUSH
-                             -DNUM_STAGE1=4 -DNUM_STAGE2=4
-                             -DSTAGE2_READ -DSTAGE2_WRITE
+                             -DNUM_STAGE2=4
+                             -DCORRECT_READ -DCORRECT_WRITE
                              -DBULK_SIZE=8 -DPOOL_SIZE=56)
   target_link_libraries(firewall_caf ${CAF_LIBRARY})
 endif()

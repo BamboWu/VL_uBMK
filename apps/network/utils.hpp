@@ -19,6 +19,10 @@
 #define BULK_SIZE 8
 #endif
 
+#ifndef MISTAKE_GATHER_RETRY
+#define MISTAKE_GATHER_RETRY 64
+#endif
+
 #define HEADER_SIZE 192
 
 struct IPv4Header {

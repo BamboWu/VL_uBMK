@@ -361,6 +361,7 @@ void stage2mistake(int desired_core) {
     return;
   }
   const size_t bulk_size = BULK_SIZE * sizeof(Packet*);
+  uint8_t *pktsbyte = (uint8_t*)pkts;
 #elif CAF
   cafendpt_t cons, prod;
   // open endpoints
@@ -382,6 +383,11 @@ void stage2mistake(int desired_core) {
 #ifdef VL
     cnt = bulk_size;
     line_vl_pop_non(&cons, (uint8_t*)pkts, &cnt);
+    for (uint64_t j = 0; cnt < bulk_size && MISTAKE_GATHER_RETRY > j; ++j) {
+      size_t tmp = bulk_size - cnt;
+      line_vl_pop_non(&cons, &pktsbyte[cnt], &tmp);
+      cnt += tmp;
+    }
     cnt /= sizeof(Packet*);
 #elif CAF
     cnt = caf_pop_bulk(&cons, (uint64_t*)pkts, BULK_SIZE);
@@ -474,6 +480,7 @@ int main(int argc, char *argv[]) {
     return -1;
   }
   const size_t bulk_size = BULK_SIZE * sizeof(Packet*);
+  uint8_t *pktsbyte = (uint8_t*)pkts;
 #elif CAF
   cafendpt_t cons, prod;
   if (open_caf(qp0, &cons)) {
@@ -540,9 +547,9 @@ int main(int argc, char *argv[]) {
 #ifdef VL
     cnt = bulk_size;
     line_vl_pop_non(&cons, (uint8_t*)pkts, &cnt);
-    if (cnt < bulk_size) {
+    for (uint64_t j = 0; cnt < bulk_size && BULK_SIZE > j; ++j) {
       size_t tmp = bulk_size - cnt;
-      line_vl_pop_non(&cons, (uint8_t*)&pkts[cnt], &tmp);
+      line_vl_pop_non(&cons, &pktsbyte[cnt], &tmp);
       cnt += tmp;
     }
     cnt /= sizeof(Packet*);

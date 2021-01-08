@@ -5,6 +5,8 @@
 #include <cstdlib>
 #include <boost/lockfree/queue.hpp>
 
+#include <sched.h>
+
 #ifndef STDATOMIC
 #include <boost/atomic.hpp>
 #else
@@ -231,12 +233,8 @@ input_stream(
     {
         data_t input_data = (data_t)(rand() % 1000);
         while(!q_out->bounded_push(input_data)){
-#ifndef STDTHREAD
-            boost::this_thread::yield();
-#else
-            std::this_thread::yield();
-#endif
-	}
+            sched_yield();
+        }
     }
 #ifdef VL
     q_out->flush();
@@ -275,19 +273,11 @@ queued_fir(
     while(t_samples--)
     {
         while(!q_in->pop(input_data)){
-#ifndef STDTHREAD
-            boost::this_thread::yield();
-#else
-            std::this_thread::yield();
-#endif
-	}
+            sched_yield();
+        }
         while(!q_out->bounded_push(fir1->filter(input_data))){
-#ifndef STDTHREAD
-            boost::this_thread::yield();
-#else
-            std::this_thread::yield();
-#endif
-	}
+            sched_yield();
+        }
     }
 #ifdef VL
     q_out->flush();
@@ -320,12 +310,8 @@ output_stream(
     while(t_samples--)
     {
         while(!q_in->pop(output_data)){
-#ifndef STDTHREAD
-            boost::this_thread::yield();
-#else
-            std::this_thread::yield();
-#endif
-	}
+            sched_yield();
+        }
 	//std::cout << output_data << std::endl;
     }
     return; 

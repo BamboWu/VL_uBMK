@@ -135,6 +135,9 @@ void stage1(int desired_core) {
   uint64_t corrupted = 0;
   size_t cnt = 0;
   bool done = false;
+  uint64_t pktscidx = 0;
+  uint64_t pktsmidx = 0;
+  uint64_t mistake_cnt = 0;
   Packet *pkts[BULK_SIZE] = { NULL };
   Packet *pktsc[BULK_SIZE] = { NULL }; // packets to stage2 correct
   Packet *pktsm[BULK_SIZE] = { NULL }; // packets to stage2 mistake
@@ -191,8 +194,6 @@ void stage1(int desired_core) {
 
     if (cnt) { // pkts has valid pointers
       // process header information
-      uint64_t pktscidx = 0;
-      uint64_t pktsmidx = 0;
       for (uint64_t i = 0; cnt > i; ++i) {
         if (pkts[i]->ipheader.data.checksumIP !=
             (pkts[i]->ipheader.data.srcIP ^ pkts[i]->ipheader.data.dstIP) ||
@@ -218,8 +219,9 @@ void stage1(int desired_core) {
           i += caf_push_bulk(&prodc, (uint64_t*)&pktsc[i], pktscidx - i);
         } while (i < pktscidx);
 #endif
+        pktscidx = 0;
       }
-      if (pktsmidx) {
+      if (BULK_SIZE == pktsmidx || MISTAKE_GATHER_RETRY <= mistake_cnt) {
 #ifdef VL
         line_vl_push_weak(&prodm, (uint8_t*)pktsm, pktsmidx * sizeof(Packet*));
 #elif CAF
@@ -228,6 +230,10 @@ void stage1(int desired_core) {
           i += caf_push_bulk(&prodm, (uint64_t*)&pktsm[i], pktsmidx - i);
         } while (i < pktsmidx);
 #endif
+        pktsmidx = 0;
+        mistake_cnt = 0;
+      } else {
+        mistake_cnt++;
       }
       continue;
     }

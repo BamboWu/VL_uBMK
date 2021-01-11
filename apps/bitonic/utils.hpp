@@ -44,7 +44,9 @@ union Message { // Cacheline-size message
     arr.len = rhs.arr.len;
     arr.beg = rhs.arr.beg;
     arr.end = rhs.arr.end;
+    arr.exp = rhs.arr.exp;
     arr.torswap = rhs.arr.torswap;
+    arr.loaded = rhs.arr.loaded;
   }
 } __attribute__((packed, aligned(64)));
 

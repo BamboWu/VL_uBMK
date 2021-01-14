@@ -25,6 +25,8 @@ find_package(VL QUIET)
 find_package(ZMQ QUIET)
 find_package(PAPI QUIET)
 find_package(Numa QUIET)
+find_package(QThread QUIET)
+find_package(RaftLib QUIET)
 
 set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -69,3 +71,17 @@ macro(add_microbenchmark NAME)
     target_link_libraries(${NAME} m5)
   endif()
 endmacro(add_microbenchmark)
+
+macro(add_raftbenchmark NAME)
+  add_executable(${NAME} ${ARGN})
+  target_compile_definitions(${NAME} PRIVATE
+      -DL1D_CACHE_LINE_SIZE=64 -DUSEQTHREADS=1)
+  target_include_directories(${NAME} PRIVATE
+      ${QTHREAD_INCLUDE_DIRS} ${RaftLib_INCLUDE_DIRS})
+  target_link_libraries(${NAME} uBMK_util
+      ${RaftLib_LIBRARIES} ${QTHREAD_LIBRARIES})
+  add_dependencies(${NAME} uBMK_util)
+  if(GEM5_ROOT)
+    target_link_libraries(${NAME} m5)
+  endif()
+endmacro(add_raftbenchmark)

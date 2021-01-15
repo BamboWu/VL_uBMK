@@ -1,6 +1,6 @@
 CMAKE_MINIMUM_REQUIRED (VERSION 3.10 FATAL_ERROR)
 
-project(fluidanimate CXX)
+project(search CXX)
 
 if(USE_MUTEX)
   add_definitions(-DUSE_MUTEX)
@@ -12,6 +12,8 @@ endif()
 
 if (NOT RaftLib_FOUND)
   MESSAGE(STATUS "WARNING: No RaftLib found, skip search.")
+elseif(NOT QTHREAD_FOUND)
+  MESSAGE(STATUS "WARNING: No qthread found, skip search.")
 else()
   add_raftbenchmark(search_std bmh.cpp)
   target_compile_definitions(search_std PRIVATE -DSTDALLOC=1)

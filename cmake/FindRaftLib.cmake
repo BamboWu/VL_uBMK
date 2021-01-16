@@ -25,16 +25,22 @@ IF(NOT RaftLib_FOUND)
       ${RAFT_ROOT}
       ${RAFT_ROOT}/include
       )
-    SET(RaftLib_LIBRARIES ${RaftLib_LIBRARY}
-        -lshm -lrt -laffinity -lpthread -ldemangle -lcmdargs)
-    SET(RaftLib_LIBRARY_DIRS /usr/local/lib)
+    IF(VL_FOUND)
+      SET(RaftLib_LDFLAGS ${RaftLib_LIBRARY}
+          -lshm -lrt -laffinity -lpthread -ldemangle -lcmdargs
+          ${VL_LIBRARY})
+    ELSE()
+      SET(RaftLib_LDFLAGS ${RaftLib_LIBRARY}
+          -lshm -lrt -laffinity -lpthread -ldemangle -lcmdargs)
+    ENDIF()
+    STRING(REPLACE "/libraft.a" "" RaftLib_LIBRARY_DIRS ${RaftLib_LIBRARY})
   ENDIF(RAFT_ROOT)
 ENDIF(NOT RaftLib_FOUND)
 
 IF (RaftLib_H AND RaftLib_LIBRARY)
   SET(RaftLib_FOUND TRUE)
   STRING(REPLACE "raft" "" RaftLib_INCLUDE_DIRS ${RaftLib_H})
-  MESSAGE(STATUS "Found raft: inc=${RaftLib_INCLUDE_DIRS}, lib=${RaftLib_LIBRARIES}")
+  MESSAGE(STATUS "Found raft: inc=${RaftLib_INCLUDE_DIRS}, lib=${RaftLib_LDFLAGS}")
 ELSEIF(RaftLib_FOUND)
-  MESSAGE(STATUS "Found raft: inc=${RaftLib_INCLUDE_DIRS}, lib=${RaftLib_LIBRARIES}")
+  MESSAGE(STATUS "Found raft: inc=${RaftLib_INCLUDE_DIRS}, lib=${RaftLib_LDFLAGS}")
 ENDIF()

@@ -80,7 +80,7 @@ macro(add_raftbenchmark NAME)
   target_include_directories(${NAME} PRIVATE
       ${QTHREAD_INCLUDE_DIRS} ${RaftLib_INCLUDE_DIRS})
   target_link_libraries(${NAME} uBMK_util
-      ${RaftLib_LIBRARIES} ${QTHREAD_LIBRARIES})
+      ${RaftLib_LDFLAGS} ${QTHREAD_LIBRARIES})
   add_dependencies(${NAME} uBMK_util)
   if(GEM5_ROOT)
     target_link_libraries(${NAME} m5)

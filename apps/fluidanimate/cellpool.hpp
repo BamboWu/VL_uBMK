@@ -5,8 +5,8 @@
 //   2.) To reuse cell structures as much as possible
 //   3.) To eliminate unnecessary synchronization for memory allocation
 
-#ifndef __CELLPOOL_HPP__
-#define __CELLPOOL_HPP__ 1
+#ifndef _FLUIDANIMATE_CELLPOOL_HPP__
+#define _FLUIDANIMATE_CELLPOOL_HPP__
 
 #include "fluid.hpp"
 

@@ -18,8 +18,8 @@
  * limitations under the License.
  */
 
-#ifndef RAFTLIBSRC_H
-#define RAFTLIBSRC_H
+#ifndef _FLUIDANIMATE_RAFTLIB_SRC_HPP__
+#define _FLUIDANIMATE_RAFTLIB_SRC_HPP__
 
 #include "fluid.hpp"
 #include <raft>

@@ -1,8 +1,8 @@
 // Written by Christian Bienia
 // This file aggregates definitions used across all versions of the program
 
-#ifndef __FLUID_HPP__
-#define __FLUID_HPP__ 1
+#ifndef _FLUIDANIMATE_FLUID_HPP__
+#define _FLUIDANIMATE_FLUID_HPP__
 
 #include <stddef.h>
 #if defined(WIN32)

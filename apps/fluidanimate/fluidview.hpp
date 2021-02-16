@@ -2,8 +2,8 @@
 // This file contains code to visualize the fluid interactively
 // Requires the GLUT library
 
-#ifndef __FLUIDVIEWER_HPP__
-#define __FLUIDVIEWER_HPP__ 1
+#ifndef _FLUIDANIMATE_FLUIDVIEW_HPP__
+#define _FLUIDANIMATE_FLUIDVIEW_HPP__
 
 #include <GL/glut.h>
 #include "fluid.hpp"

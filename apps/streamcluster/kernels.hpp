@@ -793,6 +793,7 @@ public:
         double hiz = z * 2.0;
 
         // Initializing is_center
+        memset((void*)is_center, 0, points->num * sizeof(bool));
         for (int i = 0; points->num > i; ++i) {
             is_center[points->p[i].assign] = true;
         }
@@ -821,7 +822,14 @@ public:
                 cost += (z - hiz) * k;
             }
             if (((kmin <= k) && (k <= kmax)) || ((0.999 * hiz) <= loz)) {
+#ifdef DBG
+                std::cout << "exit pFL loop with k = " << k << std::endl;
+#endif
                 break;
+#ifdef DBG
+            } else {
+                std::cout << "repeat pFL loop with k = " << k << std::endl;
+#endif
             }
         }
 
@@ -876,6 +884,10 @@ public:
                 input["from_pgain"].recycle();
             }
             cost -= change;
+#ifdef DBG
+            std::cout << "change/cost = " << change << "/" << cost << " = " <<
+                (change / cost) << " k = " << k << std::endl;
+#endif
         }
         PFLRes &res( output["to_pkmedian"].allocate<PFLRes>() );
         res.k = k;
@@ -1058,7 +1070,15 @@ public:
 
         // Decide to open x
         if (0 > gl_cost_of_opening_x) {
-            std::cout << "decided to open " << idx << std::endl;
+#ifdef DBG
+            std::cout << "before opening " << idx << ": ";
+            for (int i = 0; points->num > i; ++i) {
+                if (is_center[i]) {
+                    std::cout << " " << i;
+                }
+            }
+            std::cout << std::endl;
+#endif
             // Issue tasks to commit switch
             for (int i = 0; remain > i; ++i) {
                 CommitSwitchTask &task_tmp(
@@ -1086,7 +1106,16 @@ public:
                 input["from_commitSwitch"].pop<uint8_t>(tmp);
             }
             is_center[idx] = true;
-            k -= gl_number_of_centers_to_close + 1;
+            k -= gl_number_of_centers_to_close - 1;
+#ifdef DBG
+            std::cout << "after opening " << idx << ": ";
+            for (int i = 0; points->num > i; ++i) {
+                if (is_center[i]) {
+                    std::cout << " " << i;
+                }
+            }
+            std::cout << std::endl;
+#endif
         } else {
             gl_cost_of_opening_x = 0;
         }
@@ -1356,6 +1385,10 @@ public:
         }
         centers->num = k;
         IDoffset += points->num;
+#ifdef DBG
+        std::cout << centers->num << " centers out of " << IDoffset <<
+            std::endl;
+#endif
         output["to_master"].push<uint8_t>(task_id);
 
         return raft::proceed;

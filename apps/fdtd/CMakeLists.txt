@@ -1,0 +1,22 @@
+CMAKE_MINIMUM_REQUIRED (VERSION 3.10 FATAL_ERROR)
+
+project(fdtd CXX)
+
+if(VL_FOUND)
+  include_directories(${VL_INCLUDE_DIR})
+endif()
+
+if (NOT RaftLib_FOUND)
+  MESSAGE(STATUS "WARNING: No RaftLib found, skip search.")
+else()
+  add_raftbenchmark(fdtd main.cpp fdtd.cpp kernels.cpp)
+  if(VL_FOUND)
+    target_compile_definitions(fdtd PRIVATE -DVL=1)
+    target_link_libraries(fdtd ${VL_LIBRARY})
+  else(VL_FOUND)
+    target_compile_definitions(fdtd PRIVATE -DNOVL=1)
+  endif(VL_FOUND)
+  if (RaftLib_FOUND)
+    target_compile_definitions(fdtd PRIVATE -DQT=1)
+  endif()
+endif()

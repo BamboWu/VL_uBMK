@@ -51,19 +51,19 @@ void Worker<T>::popGrids(Grid &a, Grid &b)
 {
 	a = Grid(params.nx, params.ny, params.nz);
 	b = Grid(params.nx, params.ny, params.nz);
-	for (dim_t i = 0, lim = params.nx * params.ny * params.nz; i < lim; i++) {
-		input["A"].pop(a[i]);
+	for (dim_t i = 0, lim = params.nx * params.ny * params.nz; i < lim; i++)
 		input["B"].pop(b[i]);
-	}
+	for (dim_t i = 0, lim = params.nx * params.ny * params.nz; i < lim; i++)
+		input["A"].pop(a[i]);
 }
 
 template <typename T>
 void Worker<T>::pushGrid()
 {
-	for (dim_t i = 0, lim = params.nx * params.ny * params.nz; i < lim; i++) {
+	for (dim_t i = 0, lim = params.nx * params.ny * params.nz; i < lim; i++)
 		output["out_A"].push(grid[i]);
+	for (dim_t i = 0, lim = params.nx * params.ny * params.nz; i < lim; i++)
 		output["out_B"].push(grid[i]);
-	}
 }
 
 // H-field workers first pop grids, then compute, then push.

@@ -60,10 +60,26 @@ void Worker<T>::popGrids(Grid &a, Grid &b)
 template <typename T>
 void Worker<T>::pushGrid()
 {
-	for (dim_t i = 0, lim = params.nx * params.ny * params.nz; i < lim; i++)
-		output["out_A"].push(grid[i]);
-	for (dim_t i = 0, lim = params.nx * params.ny * params.nz; i < lim; i++)
-		output["out_B"].push(grid[i]);
+	for (dim_t i = 0, lim = params.nx * params.ny * params.nz;
+         i < lim;) {
+        const std::size_t batch = ((i + 4) < lim) ? 4 : (lim - i);
+        auto out_vec( output["out_A"].allocate_range<elem_t>(batch) );
+        for (std::size_t j = 0; batch > j; ++j) {
+            out_vec[j] = grid[i + j];
+        }
+		output["out_A"].send_range();
+        i += batch;
+    }
+	for (dim_t i = 0, lim = params.nx * params.ny * params.nz;
+         i < lim;) {
+        const std::size_t batch = ((i + 4) < lim) ? 4 : (lim - i);
+        auto out_vec( output["out_B"].allocate_range<elem_t>(batch) );
+        for (std::size_t j = 0; batch > j; ++j) {
+            out_vec[j] = grid[i + j];
+        }
+		output["out_B"].send_range();
+        i += batch;
+    }
 }
 
 // H-field workers first pop grids, then compute, then push.

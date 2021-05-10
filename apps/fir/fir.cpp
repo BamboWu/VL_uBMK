@@ -26,7 +26,9 @@
 #include "threading.h"
 #include "timing.h"
 
-#ifdef VL
+#ifdef VLINLINE
+#include "vl/vl_inline.h"
+#elif VL
 #include "vl/vl.h"
 #endif
 

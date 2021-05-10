@@ -138,10 +138,43 @@ else()
     target_compile_definitions(bitonic_vl_7S_Exp10F32 PRIVATE -DSTDTHREAD)
     target_compile_definitions(bitonic_vl_15S_Exp10F32 PRIVATE -DSTDTHREAD)
   endif()
+  add_microbenchmark(bitonic_il_1S_Exp10F32 bitonic.cpp utils.cpp)
+  add_microbenchmark(bitonic_il_3S_Exp10F32 bitonic.cpp utils.cpp)
+  add_microbenchmark(bitonic_il_7S_Exp10F32 bitonic.cpp utils.cpp)
+  add_microbenchmark(bitonic_il_15S_Exp10F32 bitonic.cpp utils.cpp)
+  target_link_libraries(bitonic_il_1S_Exp10F32 ${VLI_LIBRARY})
+  target_link_libraries(bitonic_il_3S_Exp10F32 ${VLI_LIBRARY})
+  target_link_libraries(bitonic_il_7S_Exp10F32 ${VLI_LIBRARY})
+  target_link_libraries(bitonic_il_15S_Exp10F32 ${VLI_LIBRARY})
+  target_compile_definitions(bitonic_il_1S_Exp10F32 PRIVATE -DVL=1 -DVLINLINE
+                             -DMINI_TASK_EXP=10 -DMAX_ON_THE_FLY=32
+                             -DNUM_SLAVES=1 -DNOSYSVL)
+  target_compile_definitions(bitonic_il_3S_Exp10F32 PRIVATE -DVL=1 -DVLINLINE
+                             -DMINI_TASK_EXP=10 -DMAX_ON_THE_FLY=32
+                             -DNUM_SLAVES=3 -DNOSYSVL)
+  target_compile_definitions(bitonic_il_7S_Exp10F32 PRIVATE -DVL=1 -DVLINLINE
+                             -DMINI_TASK_EXP=10 -DMAX_ON_THE_FLY=32
+                             -DNUM_SLAVES=7 -DNOSYSVL)
+  target_compile_definitions(bitonic_il_15S_Exp10F32 PRIVATE -DVL=1 -DVLINLINE
+                             -DMINI_TASK_EXP=10 -DMAX_ON_THE_FLY=32
+                             -DNUM_SLAVES=15 -DNOSYSVL)
+  if(NOT Boost_THREAD_FOUND)
+    # fall back to use pthread library find in the top CMakeLists.txt
+    target_compile_definitions(bitonic_il_1S_Exp10F32 PRIVATE -DSTDTHREAD)
+    target_compile_definitions(bitonic_il_3S_Exp10F32 PRIVATE -DSTDTHREAD)
+    target_compile_definitions(bitonic_il_7S_Exp10F32 PRIVATE -DSTDTHREAD)
+    target_compile_definitions(bitonic_il_15S_Exp10F32 PRIVATE -DSTDTHREAD)
+  endif()
   add_custom_target(bitonic_vl)
   add_dependencies(bitonic_vl
                    bitonic_vl_1S_Exp10F32
                    bitonic_vl_3S_Exp10F32
                    bitonic_vl_7S_Exp10F32
                    bitonic_vl_15S_Exp10F32)
+  add_custom_target(bitonic_il)
+  add_dependencies(bitonic_il
+                   bitonic_il_1S_Exp10F32
+                   bitonic_il_3S_Exp10F32
+                   bitonic_il_7S_Exp10F32
+                   bitonic_il_15S_Exp10F32)
 endif()

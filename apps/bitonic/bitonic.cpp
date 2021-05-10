@@ -23,7 +23,9 @@ using std::chrono::nanoseconds;
 #include "timing.h"
 #include "utils.hpp"
 
-#ifdef VL
+#ifdef VLINLINE
+#include "vl/vl_inline.h"
+#elif VL
 #include "vl/vl.h"
 #elif ZMQ
 #include <zmq.h>

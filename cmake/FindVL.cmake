@@ -1,5 +1,6 @@
 # Output variables:
 #  VL_LIBRARY           : Library path of libvl.a
+#  VLI_LIBRARY          : Library path of libvli.a
 #  VL_INCLUDE_DIR       : Include directory for VL headers
 #  VL_FOUND             : True if vl/vl.h and libvl.a found.
 #  CAF_LIBRARY          : Library path of libcaf.a
@@ -11,6 +12,11 @@ SET(CAF_FOUND FALSE)
 
 IF(VL_ROOT)
   FIND_LIBRARY(VL_LIBRARY libvl.a
+    HINTS
+    ${VL_ROOT}
+    ${VL_ROOT}/libvl
+    )
+  FIND_LIBRARY(VLI_LIBRARY libvli.a
     HINTS
     ${VL_ROOT}
     ${VL_ROOT}/libvl
@@ -29,6 +35,7 @@ IF(VL_ROOT)
     )
 ELSE(!VL_ROOT)
   FIND_LIBRARY(VL_LIBRARY libvl.a)
+  FIND_LIBRARY(VLI_LIBRARY libvli.a)
   FIND_FILE(VL_H "vl/vl.h")
   FIND_LIBRARY(CAF_LIBRARY libcaf.a)
   FIND_FILE(CAF_H "caf.h")

@@ -53,7 +53,7 @@ else()
   add_definitions(-DARM_USER_PMU_V3=0)
 endif()
 
-add_compile_options(-g -Wall)
+add_compile_options(-g -Wall -O3)
 
 subdirs(apps src)
 

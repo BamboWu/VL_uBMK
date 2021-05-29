@@ -14,7 +14,9 @@ using std::chrono::high_resolution_clock;
 using std::chrono::duration_cast;
 using std::chrono::nanoseconds;
 
-#ifdef VL
+#ifdef VLINLINE
+#include "vl/vl_inline.h"
+#elif VL
 #include "vl/vl.h"
 #endif
 
@@ -595,12 +597,6 @@ void *worker(void *arg) {
 
 #ifdef EMBER_INCAST
   bool isMaster = (0 == *pid);
-  double *buffer;
-  if (isMaster) {
-    buffer = (double*)malloc(nthreads * msgSz);
-  } else {
-    buffer = (double*)malloc(msgSz);
-  }
 #ifdef ZMQ
   void *queue;
   zmq_msg_t msg;
@@ -827,7 +823,7 @@ int main(int argc, char* argv[]) {
   boost_queues.resize(1);
   boost_queues[0] = new boost_q_t(msgSz / sizeof(double));
 #elif VL
-  mkvl(0);
+  mkvl();
 #endif
 
 #else /* NOT EMBER_INCAST */
@@ -842,7 +838,7 @@ int main(int argc, char* argv[]) {
   }
 #elif VL
   for (i = 0; (pex * pey * 4) - (pex + pey) * 2 > i; ++i) {
-    mkvl(0);
+    mkvl();
   }
 #endif
 

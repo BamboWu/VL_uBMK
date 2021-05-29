@@ -61,4 +61,16 @@ else()
   add_microbenchmark(incast_vl ember.cpp)
   target_compile_definitions(incast_vl PRIVATE -DVL -DEMBER_INCAST)
   target_link_libraries(incast_vl ${VL_LIBRARY})
+  add_microbenchmark(sweep2d_il ember.cpp)
+  target_compile_definitions(sweep2d_il PRIVATE -DVL -DEMBER_SWEEP2D
+                             -DVLINLINE -DNOSYSVL)
+  target_link_libraries(sweep2d_il ${VLI_LIBRARY})
+  add_microbenchmark(halo2d_il ember.cpp)
+  target_compile_definitions(halo2d_il PRIVATE -DVL -DEMBER_HALO2D
+                             -DVLINLINE -DNOSYSVL)
+  target_link_libraries(halo2d_il ${VLI_LIBRARY})
+  add_microbenchmark(incast_il ember.cpp)
+  target_compile_definitions(incast_il PRIVATE -DVL -DEMBER_INCAST
+                             -DVLINLINE -DNOSYSVL)
+  target_link_libraries(incast_il ${VLI_LIBRARY})
 endif()

@@ -277,7 +277,8 @@ queued_fir(
         while(!q_in->pop(input_data)){
             sched_yield();
         }
-        while(!q_out->bounded_push(fir1->filter(input_data))){
+        data_t output_data = fir1->filter(input_data);
+        while(!q_out->bounded_push(output_data)){
             sched_yield();
         }
     }
@@ -343,7 +344,7 @@ int main( int argc, char **argv )
     p_qs = new vl_q_t [stages+1];
     c_qs = new vl_q_t [stages+1];
     
-    for(int i=0; i <= stages; i++){
+    for(unsigned int i=0; i <= stages; i++){
         fds[i] = mkvl();
         if (0 > fds[i]) {
             std::cerr << "mkvl() return invalid file descriptor\n";

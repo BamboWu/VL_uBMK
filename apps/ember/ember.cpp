@@ -183,7 +183,7 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
       }
 #elif VL
       *blkId = idx;
-      cnt = ((nblks - 1) > idx ? 7 : nblks % 7) * sizeof(double);
+      cnt = (nblks - 1) > idx ? 56 : (msgSz - idx * 56);
       line_vl_push_strong(xUpSend, (uint8_t*)buf, cnt + sizeof(uint16_t));
 #endif
     }
@@ -197,7 +197,7 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
       }
 #elif VL
       *blkId = idx;
-      cnt = ((nblks - 1) > idx ? 7 : nblks % 7) * sizeof(double);
+      cnt = (nblks - 1) > idx ? 56 : (msgSz - idx * 56);
       line_vl_push_strong(yUpSend, (uint8_t*)buf, cnt + sizeof(uint16_t));
 #endif
     }
@@ -246,7 +246,7 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
       }
 #elif VL
       *blkId = idx;
-      cnt = ((nblks - 1) > idx ? 7 : nblks % 7) * sizeof(double);
+      cnt = (nblks - 1) > idx ? 56 : (msgSz - idx * 56);
       line_vl_push_strong(xDnSend, (uint8_t*)buf, cnt + sizeof(uint16_t));
 #endif
     }
@@ -260,7 +260,7 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
       }
 #elif VL
       *blkId = idx;
-      cnt = ((nblks - 1) > idx ? 7 : nblks % 7) * sizeof(double);
+      cnt = (nblks - 1) > idx ? 56 : (msgSz - idx * 56);
       line_vl_push_strong(yUpSend, (uint8_t*)buf, cnt + sizeof(uint16_t));
 #endif
     }
@@ -309,7 +309,7 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
       }
 #elif VL
       *blkId = idx;
-      cnt = ((nblks - 1) > idx ? 7 : nblks % 7) * sizeof(double);
+      cnt = (nblks - 1) > idx ? 56 : (msgSz - idx * 56);
       line_vl_push_strong(xDnSend, (uint8_t*)buf, cnt + sizeof(uint16_t));
 #endif
     }
@@ -323,7 +323,7 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
       }
 #elif VL
       *blkId = idx;
-      cnt = ((nblks - 1) > idx ? 7 : nblks % 7) * sizeof(double);
+      cnt = (nblks - 1) > idx ? 56 : (msgSz - idx * 56);
       line_vl_push_strong(yDnSend, (uint8_t*)buf, cnt + sizeof(uint16_t));
 #endif
     }
@@ -372,7 +372,7 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
       }
 #elif VL
       *blkId = idx;
-      cnt = ((nblks - 1) > idx ? 7 : nblks % 7) * sizeof(double);
+      cnt = (nblks - 1) > idx ? 56 : (msgSz - idx * 56);
       line_vl_push_strong(xUpSend, (uint8_t*)buf, cnt + sizeof(uint16_t));
 #endif
     }
@@ -386,7 +386,7 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
       }
 #elif VL
       *blkId = idx;
-      cnt = ((nblks - 1) > idx ? 7 : nblks % 7) * sizeof(double);
+      cnt = (nblks - 1) > idx ? 56 : (msgSz - idx * 56);
       line_vl_push_strong(yDnSend, (uint8_t*)buf, cnt + sizeof(uint16_t));
 #endif
     }
@@ -445,7 +445,7 @@ void halo(const int xUp, const int xDn, const int yUp, const int yDn,
       }
 #elif VL
       *blkId = idx;
-      cnt = ((nblks - 1) > idx ? 7 : nblks % 7) * sizeof(double);
+      cnt = (nblks - 1) > idx ? 56 : (msgSz - idx * 56);
       line_vl_push_strong(xUpSend, (uint8_t*)buf, cnt + sizeof(uint16_t));
 #endif
     }
@@ -459,7 +459,7 @@ void halo(const int xUp, const int xDn, const int yUp, const int yDn,
       }
 #elif VL
       *blkId = idx;
-      cnt = ((nblks - 1) > idx ? 7 : nblks % 7) * sizeof(double);
+      cnt = (nblks - 1) > idx ? 56 : (msgSz - idx * 56);
       line_vl_push_strong(xDnSend, (uint8_t*)buf, cnt + sizeof(uint16_t));
 #endif
     }
@@ -473,7 +473,7 @@ void halo(const int xUp, const int xDn, const int yUp, const int yDn,
       }
 #elif VL
       *blkId = idx;
-      cnt = ((nblks - 1) > idx ? 7 : nblks % 7) * sizeof(double);
+      cnt = (nblks - 1) > idx ? 56 : (msgSz - idx * 56);
       line_vl_push_strong(yUpSend, (uint8_t*)buf, cnt + sizeof(uint16_t));
 #endif
     }
@@ -487,7 +487,7 @@ void halo(const int xUp, const int xDn, const int yUp, const int yDn,
       }
 #elif VL
       *blkId = idx;
-      cnt = ((nblks - 1) > idx ? 7 : nblks % 7) * sizeof(double);
+      cnt = (nblks - 1) > idx ? 56 : (msgSz - idx * 56);
       line_vl_push_strong(yDnSend, (uint8_t*)buf, cnt + sizeof(uint16_t));
 #endif
     }
@@ -599,7 +599,7 @@ void incast(const bool isMaster,
 #elif VL
       for (idx = 0; nblks > idx; ++idx) {
         *blkId = idx;
-        cnt = ((nblks - 1) > idx ? 7 : nblks % 7) * sizeof(double);
+        cnt = (nblks - 1) > idx ? 56 : (msgSz - idx * 56);
         line_vl_push_strong(queue, (uint8_t*)buf, cnt + sizeof(uint16_t));
       }
 #endif
@@ -686,7 +686,8 @@ void *worker(void *arg) {
     assert(0 == zmq_connect(yDnRecv, queue_str));
   }
 #elif BOOST
-  double msg[msgSz];
+  char msgBuf[msgSz];
+  double* msg = (double*) msgBuf;
   boost_q_t *xUpSend = nullptr;
   boost_q_t *xUpRecv = nullptr;
   boost_q_t *xDnSend = nullptr;
@@ -713,7 +714,8 @@ void *worker(void *arg) {
     yDnRecv = boost_queues[yDnRx];
   }
 #elif VL
-  double msg[msgSz];
+  char msgBuf[msgSz];
+  double* msg = (double*) msgBuf;
   vlendpt_t endpts[8];
   vlendpt_t *xUpSend = &endpts[0];
   vlendpt_t *xDnSend = &endpts[1];

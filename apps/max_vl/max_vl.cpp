@@ -44,8 +44,12 @@ volatile int prod_core, cons_core;
 int nrounds;
 std::atomic< int > ready;
 
+int prod_context_switches, cons_context_switches;
+
 void *producer(void *args) {
   setAffinity(prod_core);
+  pid_t pid = getPID();
+  const int nswitches_before = getContextSwitches(pid);
   vlendpt_t send;
   open_byte_vl_as_producer(fd, &send, 1);
   volatile void *cva = send.pcacheline;
@@ -73,10 +77,14 @@ void *producer(void *args) {
       : "x8", "x9", "cc"
       );
 
+  const int nswitches_after = getContextSwitches(pid);
+  prod_context_switches = nswitches_after - nswitches_before;
   return NULL;
 }
 void *consumer(void *args) {
   setAffinity(cons_core);
+  pid_t pid = getPID();
+  const int nswitches_before = getContextSwitches(pid);
   vlendpt_t recv;
   open_byte_vl_as_consumer(fd, &recv, 32);
   volatile void *cva = recv.pcacheline;
@@ -114,11 +122,22 @@ void *consumer(void *args) {
       : "x8", "x9", "x10", "cc", "memory"
       );
 
+  const int nswitches_after = getContextSwitches(pid);
+  cons_context_switches = nswitches_after - nswitches_before;
   return NULL;
 }
 
 int main(int argc, char *argv[]) {
 
+#ifndef NOSCHEDRR
+  int priority = sched_get_priority_max(SCHED_RR);
+  struct sched_param sp = { .sched_priority = priority };
+  if (0 != sched_setscheduler(0x0 /* this */,
+                              SCHED_RR,
+                              &sp)) {
+    perror("failed to set schedule");
+  }
+#endif
   setAffinity(0);
 
   nrounds = 1024;
@@ -151,5 +170,7 @@ int main(int argc, char *argv[]) {
 #endif
   const uint64_t end = rdtsc();
   printf("average ticks: %f\n", (end - beg) / (double) nrounds);
+  printf("producer context switches: %d\n", prod_context_switches);
+  printf("consumer context switches: %d\n", cons_context_switches);
   return 0;
 }

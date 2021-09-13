@@ -57,7 +57,26 @@ void *producer(void *args) {
   uint8_t *pbyte = (uint8_t*) cva;
   pbyte[62] = 0x3F; // underflow in producer cacheline means full
   ready++;
-  while( 3 != ready ){ /** spin **/ };
+  while( 3 != ready.load() ){
+      for (long i = 0; 1000 > i; ++i) {
+        __asm__ volatile("\
+            nop \n\
+            nop \n\
+            nop \n\
+            nop \n\
+            nop \n\
+            nop \n\
+            nop \n\
+            nop \n\
+            nop \n\
+            nop \n\
+            "
+            :
+            :
+            :
+            );
+      }
+  }
 
   __asm__ volatile (
       "      mov  x8,  %[cnt]     \n\r"
@@ -90,7 +109,26 @@ void *consumer(void *args) {
   volatile void *cva = recv.pcacheline;
   volatile void *devmem = links_g[recv.fd].cons_devmem;
   ready++;
-  while( 3 != ready ){ /** spin **/ };
+  while( 3 != ready.load() ){
+      for (long i = 0; 1000 > i; ++i) {
+        __asm__ volatile("\
+            nop \n\
+            nop \n\
+            nop \n\
+            nop \n\
+            nop \n\
+            nop \n\
+            nop \n\
+            nop \n\
+            nop \n\
+            nop \n\
+            "
+            :
+            :
+            :
+            );
+      }
+  }
 
   __asm__ volatile (
       "        mov  x8,  %[cnt]     \n\r"
@@ -158,11 +196,33 @@ int main(int argc, char *argv[]) {
   pthread_t threads[2];
   pthread_create(&threads[0], NULL, producer, NULL);
   pthread_create(&threads[1], NULL, consumer, NULL);
+
+  while (2 != ready.load()) {
+      for (long i = 0; 1000 > i; ++i) {
+        __asm__ volatile("\
+            nop \n\
+            nop \n\
+            nop \n\
+            nop \n\
+            nop \n\
+            nop \n\
+            nop \n\
+            nop \n\
+            nop \n\
+            nop \n\
+            "
+            :
+            :
+            :
+            );
+      }
+  }
+  ready++;
+
   const uint64_t beg = rdtsc();
 #ifndef NOGEM5
   m5_reset_stats(0, 0);
 #endif
-  ready++;
   pthread_join(threads[0], NULL);
   pthread_join(threads[1], NULL);
 #ifndef NOGEM5

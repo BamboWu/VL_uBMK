@@ -134,6 +134,10 @@ void *consumer(void *args) {
       "        mov  x8,  %[cnt]     \n\r"
       "        mov  x9,  %[cva]     \n\r"
       "POP:                         \n\r"
+      "        ldrb w10, [x9, #62]  \n\r" /* From DEQB */
+      "        and  w10, w10, 0x03F \n\r"
+      "        cmp  w10, #61        \n\r"
+      "        b.le FILLED          \n\r"
 #ifndef NOGEM5
       "        .word     0xd508b009 \n\r" /* DC.SVAC */
       "        mov  x10, %[devmem]  \n\r"
@@ -142,10 +146,6 @@ void *consumer(void *args) {
       "        mov  w10, 0x01       \n\r"
       "        strb w10, [x9, #62]  \n\r"
 #endif
-      "        ldrb w10, [x9, #62]  \n\r" /* From DEQB */
-      "        and  w10, w10, 0x03F \n\r"
-      "        cmp  w10, #61        \n\r"
-      "        b.le FILLED          \n\r"
       "        ldrb w10, [x9, #63]  \n\r" /* From VL_Next */
       "        sxtb x10, w10        \n\r"
       "        lsl  x10, x10, #6    \n\r"
@@ -153,6 +153,20 @@ void *consumer(void *args) {
       "        b    POP             \n\r"
       "FILLED: mov  w10, 0x03F      \n\r"
       "        strb w10, [x9, #62]  \n\r"
+#ifndef NOGEM5
+      "        .word     0xd508b009 \n\r" /* DC.SVAC */
+      "        mov  x10, %[devmem]  \n\r"
+      "        .word     0xd508b04a \n\r" /* DC.PSVAC */
+#else
+      "        mov  w10, 0x01       \n\r"
+      "        strb w10, [x9, #62]  \n\r"
+#endif
+#ifdef ALWAYS_NEXT
+      "        ldrb w10, [x9, #63]  \n\r" /* From VL_Next */
+      "        sxtb x10, w10        \n\r"
+      "        lsl  x10, x10, #6    \n\r"
+      "        add  x9,  x9,  x10   \n\r"
+#endif
       "        subs x8,  x8,  #1    \n\r"
       "        b.ne      POP        \n\r"
       :

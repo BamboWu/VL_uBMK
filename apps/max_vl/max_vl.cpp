@@ -39,6 +39,10 @@ struct VirtualLink {
 /* Instantiated in libvl/libvl/mkvl.c */
 extern struct VirtualLink links_g[VL_MAX];
 
+#ifndef NUM_CONSUMER_CACHELINE
+#define NUM_CONSUMER_CACHELINE 32
+#endif
+
 int fd;
 volatile int prod_core, cons_core;
 int nrounds;
@@ -105,7 +109,7 @@ void *consumer(void *args) {
   pid_t pid = getPID();
   const int nswitches_before = getContextSwitches(pid);
   vlendpt_t recv;
-  open_byte_vl_as_consumer(fd, &recv, 32);
+  open_byte_vl_as_consumer(fd, &recv, NUM_CONSUMER_CACHELINE);
   volatile void *cva = recv.pcacheline;
   volatile void *devmem = links_g[recv.fd].cons_devmem;
   ready++;
@@ -146,10 +150,12 @@ void *consumer(void *args) {
       "        mov  w10, 0x01       \n\r"
       "        strb w10, [x9, #62]  \n\r"
 #endif
+#if NUM_CONSUMER_CACHELINE != 1
       "        ldrb w10, [x9, #63]  \n\r" /* From VL_Next */
       "        sxtb x10, w10        \n\r"
       "        lsl  x10, x10, #6    \n\r"
       "        add  x9,  x9,  x10   \n\r"
+#endif
       "        b    POP             \n\r"
       "FILLED: mov  w10, 0x03F      \n\r"
       "        strb w10, [x9, #62]  \n\r"
@@ -161,7 +167,7 @@ void *consumer(void *args) {
       "        mov  w10, 0x01       \n\r"
       "        strb w10, [x9, #62]  \n\r"
 #endif
-#ifdef ALWAYS_NEXT
+#if ALWAYS_NEXT & (NUM_CONSUMER_CACHELINE != 1)
       "        ldrb w10, [x9, #63]  \n\r" /* From VL_Next */
       "        sxtb x10, w10        \n\r"
       "        lsl  x10, x10, #6    \n\r"

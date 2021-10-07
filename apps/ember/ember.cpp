@@ -96,6 +96,9 @@ long sleep_nsec;
 long sleep_nsec2;
 long burst_amp;
 long burst_period;
+long fast_period;
+long slow_period;
+int master_cacheline;
 std::atomic< int > ready;
 #ifdef ZMQ
 void *ctx;
@@ -603,7 +606,8 @@ void incast(const bool isMaster,
         line_vl_push_strong(queue, (uint8_t*)buf, cnt + sizeof(uint16_t));
       }
 #endif
-      long sleep_tmp = ((i / burst_period) & 0x1) ? -burst_amp : burst_amp;
+      long sleep_tmp =
+          ((i % burst_period) > slow_period) ? -burst_amp : burst_amp;
       sleep_tmp += sleep_nsec2;
       if (0 < sleep_tmp) {
         compute(sleep_tmp);
@@ -618,6 +622,12 @@ void *worker(void *arg) {
 
 #ifdef EMBER_INCAST
   bool isMaster = (0 == *pid);
+  if (isMaster) {
+    printf("slow/fast span: %4ld / %4ld\n", slow_period, fast_period);
+    printf("slave sleep:   %4ld +- %4ld\n", sleep_nsec2, burst_amp);
+    printf("master sleep:          %4ld\n", sleep_nsec);
+    printf("master cachelines:      %3d\n", master_cacheline);
+  }
 #ifdef ZMQ
   void *queue;
   zmq_msg_t msg;
@@ -637,7 +647,7 @@ void *worker(void *arg) {
   vlendpt_t endpt;
   vlendpt_t *queue = &endpt;
   if (isMaster) {
-    open_byte_vl_as_consumer(1, queue, 32);
+    open_byte_vl_as_consumer(1, queue, master_cacheline);
   } else {
     open_byte_vl_as_producer(1, queue, 1);
   }
@@ -815,7 +825,9 @@ int main(int argc, char* argv[]) {
   sleep_nsec = 1000;
   sleep_nsec2 = 1000;
   burst_amp = 0;
-  burst_period = 1;
+  fast_period = 1;
+  slow_period = 1;
+  master_cacheline = 32;
   for (i = 0; argc > i; ++i) {
     if (0 == strcmp("-pex", argv[i])) {
       pex = atoi(argv[i + 1]);
@@ -838,8 +850,14 @@ int main(int argc, char* argv[]) {
     } else if (0 == strcmp("-burst_amp", argv[i])) {
       burst_amp = atoi(argv[i + 1]);
       ++i;
-    } else if (0 == strcmp("-burst_period", argv[i])) {
-      burst_period = atoi(argv[i + 1]);
+    } else if (0 == strcmp("-fast_period", argv[i])) {
+      fast_period = atoi(argv[i + 1]);
+      ++i;
+    } else if (0 == strcmp("-slow_period", argv[i])) {
+      slow_period = atoi(argv[i + 1]);
+      ++i;
+    } else if (0 == strcmp("-master_cacheline", argv[i])) {
+      master_cacheline = atoi(argv[i + 1]);
       ++i;
     }
   }
@@ -847,6 +865,7 @@ int main(int argc, char* argv[]) {
   printf("Message Size:         %5d\n", msgSz);
   printf("Iterations:           %5d\n", repeats);
   nthreads = pex * pey;
+  burst_period = slow_period + fast_period;
   ready = -1;
 
 #ifdef EMBER_INCAST

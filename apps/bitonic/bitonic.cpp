@@ -308,7 +308,7 @@ void slave(const int desired_core) {
 }
 
 /* Sort an array */
-void sort(int *arr, const uint64_t len) {
+void sort(int *arr, const uint64_t len, const int num_consumer_lines) {
   setAffinity(0);
   int core_id = 1;
   uint64_t task_beg;
@@ -340,7 +340,8 @@ void sort(int *arr, const uint64_t len) {
     return;
   }
 
-  if ((errorcode = open_byte_vl_as_consumer(topair_fd, &topair_cons, 16))) {
+  if ((errorcode = open_byte_vl_as_consumer(topair_fd, &topair_cons,
+          num_consumer_lines))) {
     printf("\033[91mFAILED:\033[0m open_byte_vl_as_consumer(topair_fd) "
            "return %d\n", errorcode);
     return;
@@ -703,14 +704,18 @@ void sort(int *arr, const uint64_t len) {
 
 int main(int argc, char *argv[]) {
   uint64_t len = 16;
+  int num_consumer_lines = 16; // number of the consumer cachelines for master
   if (1 < argc) {
     len = strtoull(argv[1], NULL, 0);
+    if (2 < argc) {
+      num_consumer_lines = atoi(argv[2]);
+    }
   }
   const uint64_t len_roundup = roundup64(len);
   int *arr = (int*) memalign(64, len_roundup * sizeof(int));
   gen(arr, len);
   fill(&arr[len], len_roundup - len, INT_MAX); // padding
-  sort(arr, len_roundup);
+  sort(arr, len_roundup, num_consumer_lines);
   std::cout << std::endl;
   check(arr, len);
   free(arr);

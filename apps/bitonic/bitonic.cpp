@@ -132,7 +132,26 @@ void slave(const int desired_core) {
 #endif
 
   ready++;
-  while ((1 + NUM_SLAVES) != ready.load()) { /** spin **/ };
+  while ((1 + NUM_SLAVES) != ready.load()) {
+      for (long i = 0; (10 * desired_core) > i; ++i) {
+        __asm__ volatile("\
+            nop \n\
+            nop \n\
+            nop \n\
+            nop \n\
+            nop \n\
+            nop \n\
+            nop \n\
+            nop \n\
+            nop \n\
+            nop \n\
+            "
+            :
+            :
+            :
+            );
+      }
+  };
 
   while (!done) {
     if (!loaded) {
@@ -390,11 +409,31 @@ void sort(int *arr, const uint64_t len, const int num_consumer_lines) {
   uint8_t *dcnts = new uint8_t[cnt_len](); // how long the rswap/swap has done
   uint8_t *bcnts = new uint8_t[cnt_len](); // how long has touch the bottom
 
-  ready++;
-  while ((1 + NUM_SLAVES) != ready.load()) { /** spin **/ };
+  while (NUM_SLAVES != ready.load()) {
+      for (long i = 0; 1000 > i; ++i) {
+        __asm__ volatile("\
+            nop \n\
+            nop \n\
+            nop \n\
+            nop \n\
+            nop \n\
+            nop \n\
+            nop \n\
+            nop \n\
+            nop \n\
+            nop \n\
+            "
+            :
+            :
+            :
+            );
+      }
+  };
 
   const uint64_t beg_tsc = rdtsc();
   const auto beg(high_resolution_clock::now());
+
+  ready++;
 
 #ifndef NOGEM5
   m5_reset_stats(0, 0);

@@ -4,6 +4,7 @@
 #include <errno.h>
 #include <sys/time.h>
 #include <time.h>
+#include <unistd.h>
 
 #include <atomic>
 
@@ -140,6 +141,8 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
       /* vl has to break a message to fit into cacheline
        * and this loop cannot be inside, otherwise all producers goes first,
        * and it would overwhelm routing device producer buffer */
+      *blkId = idx;
+      cnt = (nblks - 1) > idx ? 56 : (msgSz - idx * 56);
 #endif
 
     /* Sweep from (0,0) to (Px,Py) */
@@ -185,8 +188,6 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
         while (!xUpSend->push(*msg));
       }
 #elif VL
-      *blkId = idx;
-      cnt = (nblks - 1) > idx ? 56 : (msgSz - idx * 56);
       line_vl_push_strong(xUpSend, (uint8_t*)buf, cnt + sizeof(uint16_t));
 #endif
     }
@@ -199,8 +200,6 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
         while (!yUpSend->push(*msg));
       }
 #elif VL
-      *blkId = idx;
-      cnt = (nblks - 1) > idx ? 56 : (msgSz - idx * 56);
       line_vl_push_strong(yUpSend, (uint8_t*)buf, cnt + sizeof(uint16_t));
 #endif
     }
@@ -248,8 +247,6 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
         while (!xDnSend->push(*msg));
       }
 #elif VL
-      *blkId = idx;
-      cnt = (nblks - 1) > idx ? 56 : (msgSz - idx * 56);
       line_vl_push_strong(xDnSend, (uint8_t*)buf, cnt + sizeof(uint16_t));
 #endif
     }
@@ -262,8 +259,6 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
         while (!yUpSend->push(*msg));
       }
 #elif VL
-      *blkId = idx;
-      cnt = (nblks - 1) > idx ? 56 : (msgSz - idx * 56);
       line_vl_push_strong(yUpSend, (uint8_t*)buf, cnt + sizeof(uint16_t));
 #endif
     }
@@ -311,8 +306,6 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
         while (!xDnSend->push(*msg));
       }
 #elif VL
-      *blkId = idx;
-      cnt = (nblks - 1) > idx ? 56 : (msgSz - idx * 56);
       line_vl_push_strong(xDnSend, (uint8_t*)buf, cnt + sizeof(uint16_t));
 #endif
     }
@@ -325,8 +318,6 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
         while (!yDnSend->push(*msg));
       }
 #elif VL
-      *blkId = idx;
-      cnt = (nblks - 1) > idx ? 56 : (msgSz - idx * 56);
       line_vl_push_strong(yDnSend, (uint8_t*)buf, cnt + sizeof(uint16_t));
 #endif
     }
@@ -374,8 +365,6 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
         while (!xUpSend->push(*msg));
       }
 #elif VL
-      *blkId = idx;
-      cnt = (nblks - 1) > idx ? 56 : (msgSz - idx * 56);
       line_vl_push_strong(xUpSend, (uint8_t*)buf, cnt + sizeof(uint16_t));
 #endif
     }
@@ -388,8 +377,6 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
         while (!yDnSend->push(*msg));
       }
 #elif VL
-      *blkId = idx;
-      cnt = (nblks - 1) > idx ? 56 : (msgSz - idx * 56);
       line_vl_push_strong(yDnSend, (uint8_t*)buf, cnt + sizeof(uint16_t));
 #endif
     }
@@ -435,6 +422,8 @@ void halo(const int xUp, const int xDn, const int yUp, const int yDn,
 
 #ifdef VL
     for (idx = 0; nblks > idx; ++idx) {
+      *blkId = idx;
+      cnt = (nblks - 1) > idx ? 56 : (msgSz - idx * 56);
 #endif
 
     /* send to four neighbours */
@@ -447,8 +436,6 @@ void halo(const int xUp, const int xDn, const int yUp, const int yDn,
         while (!xUpSend->push(*msg));
       }
 #elif VL
-      *blkId = idx;
-      cnt = (nblks - 1) > idx ? 56 : (msgSz - idx * 56);
       line_vl_push_strong(xUpSend, (uint8_t*)buf, cnt + sizeof(uint16_t));
 #endif
     }
@@ -461,8 +448,6 @@ void halo(const int xUp, const int xDn, const int yUp, const int yDn,
         while (!xDnSend->push(*msg));
       }
 #elif VL
-      *blkId = idx;
-      cnt = (nblks - 1) > idx ? 56 : (msgSz - idx * 56);
       line_vl_push_strong(xDnSend, (uint8_t*)buf, cnt + sizeof(uint16_t));
 #endif
     }
@@ -475,8 +460,6 @@ void halo(const int xUp, const int xDn, const int yUp, const int yDn,
         while (!yUpSend->push(*msg));
       }
 #elif VL
-      *blkId = idx;
-      cnt = (nblks - 1) > idx ? 56 : (msgSz - idx * 56);
       line_vl_push_strong(yUpSend, (uint8_t*)buf, cnt + sizeof(uint16_t));
 #endif
     }
@@ -489,8 +472,6 @@ void halo(const int xUp, const int xDn, const int yUp, const int yDn,
         while (!yDnSend->push(*msg));
       }
 #elif VL
-      *blkId = idx;
-      cnt = (nblks - 1) > idx ? 56 : (msgSz - idx * 56);
       line_vl_push_strong(yDnSend, (uint8_t*)buf, cnt + sizeof(uint16_t));
 #endif
     }
@@ -756,7 +737,9 @@ void *worker(void *arg) {
 #endif /* EMBER_INCAST */
 
   ready++;
-  while( nthreads != ready ){ /** spin **/ };
+  while( nthreads != ready ){
+      compute(*pid * 10);
+  };
 
 #ifdef EMBER_INCAST
   incast(isMaster, &msg, queue);
@@ -904,8 +887,11 @@ int main(int argc, char* argv[]) {
     ids[i] = i;
     pthread_create(&threads[i], NULL, worker, (void *)&ids[i]);
   }
-  compute(1000000);
+  sleep(1);
 
+  while( (nthreads - 1) != ready ){
+    compute(100);
+  }
   const uint64_t beg_tsc = rdtsc();
   const auto beg(high_resolution_clock::now());
 

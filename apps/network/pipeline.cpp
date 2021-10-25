@@ -21,7 +21,9 @@ using std::chrono::nanoseconds;
 #include "gem5/m5ops.h"
 #endif
 
-#ifdef VL
+#ifdef VLINLINE
+#include "vl/vl_inline.h"
+#elif VL
 #include "vl/vl.h"
 #elif CAF
 #include "caf.h"

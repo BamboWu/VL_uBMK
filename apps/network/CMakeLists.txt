@@ -32,6 +32,19 @@ else()
                              -DCORRECT_READ -DCORRECT_WRITE
                              -DBULK_SIZE=7 -DPOOL_SIZE=56)
   target_link_libraries(firewall_vl ${VL_LIBRARY})
+  add_microbenchmark(pipeline_il pipeline.cpp)
+  target_compile_definitions(pipeline_il PRIVATE -DVL -DVLINLINE -DNOSYSVL
+                             -DNUM_STAGE1=4 -DNUM_STAGE2=4
+                             -DSTAGE1_READ -DSTAGE1_WRITE
+                             -DSTAGE2_READ -DSTAGE2_WRITE
+                             -DBULK_SIZE=7 -DPOOL_SIZE=56)
+  target_link_libraries(pipeline_il ${VL_LIBRARY})
+  add_microbenchmark(firewall_il firewall.cpp)
+  target_compile_definitions(firewall_il PRIVATE -DVL -DVLINLINE -DNOSYSVL
+                             -DNUM_STAGE2=4
+                             -DCORRECT_READ -DCORRECT_WRITE
+                             -DBULK_SIZE=7 -DPOOL_SIZE=56)
+  target_link_libraries(firewall_il ${VL_LIBRARY})
 endif()
 
 if(NOT CAF_FOUND)

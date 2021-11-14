@@ -2,8 +2,10 @@ project(VL_uBMK)
 
 cmake_minimum_required(VERSION 3.1)
 
-include_directories(${Boost_INCLUDE_DIRS})
-link_directories(${Boost_LIBRARY_DIRS})
+if (Boost_FOUND)
+  include_directories(${Boost_INCLUDE_DIRS})
+  link_directories(${Boost_LIBRARY_DIRS})
+endif()
 
 if(VL_FOUND)
   include_directories(${VL_INCLUDE_DIR})
@@ -35,7 +37,7 @@ elseif(NOT (ZMQ_STATIC_FOUND OR ZMQ_DYNAMIC_FOUND))
   MESSAGE(STATUS "WARNING: No zmq library, skip sweep2d_zmq, halo2d_zmq, incast_zmq.")
 endif()
 
-if(NOT Boost_LOCKFREE_QUEUE_HPP)
+if(NOT Boost_FOUND OR NOT Boost_LOCKFREE_QUEUE_HPP)
   MESSAGE(STATUS "WARNING: No boost/lockfree/queue.hpp, skip sweep2d_boost, halo2d_boost, incast_vl.")
 else()
   add_microbenchmark(sweep2d_boost ember.cpp)

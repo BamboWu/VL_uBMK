@@ -132,7 +132,7 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
   char buf[64];
   uint16_t *blkId = (uint16_t*)buf; /* used to reorder cache blocks */
   uint16_t idx;
-  size_t cnt;
+  size_t cnt, rcnt;
 #endif
   for (i = 0; repeats > i; ++i) {
 
@@ -155,7 +155,7 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
         while (!xDnRecv->pop(*msg));
       }
 #elif VL
-      line_vl_pop_weak(xDnRecv, (uint8_t*)buf, &cnt);
+      line_vl_pop_weak(xDnRecv, (uint8_t*)buf, &rcnt);
 #endif
     }
     if (-1 < yDn) {
@@ -167,7 +167,7 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
         while (!yDnRecv->pop(*msg));
       }
 #elif VL
-      line_vl_pop_weak(yDnRecv, (uint8_t*)buf, &cnt);
+      line_vl_pop_weak(yDnRecv, (uint8_t*)buf, &rcnt);
 #endif
     }
 
@@ -204,65 +204,6 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
 #endif
     }
 
-    /* Sweep from (Px,0) to (0,Py) */
-    if (-1 < xUp) {
-#ifdef ZMQ
-      assert(0 == zmq_msg_init(&msg[4]));
-      assert(msgSz == zmq_msg_recv(&msg[4], xUpRecv, 0));
-#elif BOOST
-      for (idx = 0; ndoubles > idx; ++idx) {
-        while (!xUpRecv->pop(*msg));
-      }
-#elif VL
-      line_vl_pop_weak(xUpRecv, (uint8_t*)buf, &cnt);
-#endif
-    }
-    if (-1 < yDn) {
-#ifdef ZMQ
-      assert(0 == zmq_msg_init(&msg[7]));
-      assert(msgSz == zmq_msg_recv(&msg[7], yDnRecv, 0));
-#elif BOOST
-      for (idx = 0; ndoubles > idx; ++idx) {
-        while (!yDnRecv->pop(*msg));
-      }
-#elif VL
-      line_vl_pop_weak(yDnRecv, (uint8_t*)buf, &cnt);
-#endif
-    }
-
-#ifdef VL
-    if (0 == idx) { /* only compute with completed messages */
-#endif
-    compute(sleep_nsec);
-#ifdef VL
-    }
-#endif
-
-    if (-1 < xDn) {
-#ifdef ZMQ
-      assert(0 == zmq_msg_init_size(&msg[1], msgSz));
-      assert(msgSz == zmq_msg_send(&msg[1], xDnSend, 0));
-#elif BOOST
-      for (idx = 0; ndoubles > idx; ++idx) {
-        while (!xDnSend->push(*msg));
-      }
-#elif VL
-      line_vl_push_strong(xDnSend, (uint8_t*)buf, cnt + sizeof(uint16_t));
-#endif
-    }
-    if (-1 < yUp) {
-#ifdef ZMQ
-      assert(0 == zmq_msg_init_size(&msg[2], msgSz));
-      assert(msgSz == zmq_msg_send(&msg[2], yUpSend, 0));
-#elif BOOST
-      for (idx = 0; ndoubles > idx; ++idx) {
-        while (!yUpSend->push(*msg));
-      }
-#elif VL
-      line_vl_push_strong(yUpSend, (uint8_t*)buf, cnt + sizeof(uint16_t));
-#endif
-    }
-
     /* Sweep from (Px,Py) to (0,0) */
     if (-1 < xUp) {
 #ifdef ZMQ
@@ -273,7 +214,7 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
         while (!xUpRecv->pop(*msg));
       }
 #elif VL
-      line_vl_pop_weak(xUpRecv, (uint8_t*)buf, &cnt);
+      line_vl_pop_weak(xUpRecv, (uint8_t*)buf, &rcnt);
 #endif
     }
     if (-1 < yUp) {
@@ -285,7 +226,7 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
         while (!yUpRecv->pop(*msg));
       }
 #elif VL
-      line_vl_pop_weak(yUpRecv, (uint8_t*)buf, &cnt);
+      line_vl_pop_weak(yUpRecv, (uint8_t*)buf, &rcnt);
 #endif
     }
 
@@ -322,6 +263,65 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
 #endif
     }
 
+    /* Sweep from (Px,0) to (0,Py) */
+    if (-1 < xUp) {
+#ifdef ZMQ
+      assert(0 == zmq_msg_init(&msg[4]));
+      assert(msgSz == zmq_msg_recv(&msg[4], xUpRecv, 0));
+#elif BOOST
+      for (idx = 0; ndoubles > idx; ++idx) {
+        while (!xUpRecv->pop(*msg));
+      }
+#elif VL
+      line_vl_pop_weak(xUpRecv, (uint8_t*)buf, &rcnt);
+#endif
+    }
+    if (-1 < yDn) {
+#ifdef ZMQ
+      assert(0 == zmq_msg_init(&msg[7]));
+      assert(msgSz == zmq_msg_recv(&msg[7], yDnRecv, 0));
+#elif BOOST
+      for (idx = 0; ndoubles > idx; ++idx) {
+        while (!yDnRecv->pop(*msg));
+      }
+#elif VL
+      line_vl_pop_weak(yDnRecv, (uint8_t*)buf, &rcnt);
+#endif
+    }
+
+#ifdef VL
+    if (0 == idx) { /* only compute with completed messages */
+#endif
+    compute(sleep_nsec);
+#ifdef VL
+    }
+#endif
+
+    if (-1 < xDn) {
+#ifdef ZMQ
+      assert(0 == zmq_msg_init_size(&msg[1], msgSz));
+      assert(msgSz == zmq_msg_send(&msg[1], xDnSend, 0));
+#elif BOOST
+      for (idx = 0; ndoubles > idx; ++idx) {
+        while (!xDnSend->push(*msg));
+      }
+#elif VL
+      line_vl_push_strong(xDnSend, (uint8_t*)buf, cnt + sizeof(uint16_t));
+#endif
+    }
+    if (-1 < yUp) {
+#ifdef ZMQ
+      assert(0 == zmq_msg_init_size(&msg[2], msgSz));
+      assert(msgSz == zmq_msg_send(&msg[2], yUpSend, 0));
+#elif BOOST
+      for (idx = 0; ndoubles > idx; ++idx) {
+        while (!yUpSend->push(*msg));
+      }
+#elif VL
+      line_vl_push_strong(yUpSend, (uint8_t*)buf, cnt + sizeof(uint16_t));
+#endif
+    }
+
     /* Sweep from (0,Py) to (Px,0) */
     if (-1 < xDn) {
 #ifdef ZMQ
@@ -332,7 +332,7 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
         while (!xDnRecv->pop(*msg));
       }
 #elif VL
-      line_vl_pop_weak(xDnRecv, (uint8_t*)buf, &cnt);
+      line_vl_pop_weak(xDnRecv, (uint8_t*)buf, &rcnt);
 #endif
     }
     if (-1 < yUp) {
@@ -344,7 +344,7 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
         while (!yUpRecv->pop(*msg));
       }
 #elif VL
-      line_vl_pop_weak(yUpRecv, (uint8_t*)buf, &cnt);
+      line_vl_pop_weak(yUpRecv, (uint8_t*)buf, &rcnt);
 #endif
     }
 
@@ -601,8 +601,8 @@ void *worker(void *arg) {
   int *pid = (int*) arg;
   setAffinity(*pid);
 
-#ifdef EMBER_INCAST
   bool isMaster = (0 == *pid);
+#ifdef EMBER_INCAST
   if (isMaster) {
     printf("slow/fast span: %4ld / %4ld\n", slow_period, fast_period);
     printf("slave sleep:   %4ld +- %4ld\n", sleep_nsec2, burst_amp);
@@ -736,10 +736,22 @@ void *worker(void *arg) {
 
 #endif /* EMBER_INCAST */
 
-  ready++;
-  while( nthreads != ready ){
+  if (isMaster) {
+    while( (nthreads - 1) != ready ){
+      compute(100);
+    }
+
+#ifndef NOGEM5
+    m5_reset_stats(0, 0);
+#endif
+
+    ready++;
+  } else {
+    ready++;
+    while( nthreads != ready ){
       compute(*pid * 10);
-  };
+    };
+  }
 
 #ifdef EMBER_INCAST
   incast(isMaster, &msg, queue);
@@ -849,7 +861,7 @@ int main(int argc, char* argv[]) {
   printf("Iterations:           %5d\n", repeats);
   nthreads = pex * pey;
   burst_period = slow_period + fast_period;
-  ready = -1;
+  ready = 0;
 
 #ifdef EMBER_INCAST
 
@@ -883,24 +895,17 @@ int main(int argc, char* argv[]) {
 
   pthread_t threads[nthreads];
   int ids[nthreads];
-  for (i = 0; nthreads > i; ++i) {
+  for (i = 1; nthreads > i; ++i) {
     ids[i] = i;
     pthread_create(&threads[i], NULL, worker, (void *)&ids[i]);
   }
-  sleep(1);
 
-  while( (nthreads - 1) != ready ){
-    compute(100);
-  }
   const uint64_t beg_tsc = rdtsc();
   const auto beg(high_resolution_clock::now());
+  ids[0] = 0;
+  worker((void*)&ids[0]); // main thread itself as the master worker
 
-#ifndef NOGEM5
-  m5_reset_stats(0, 0);
-#endif
-
-  ready++;
-  for (i = 0; nthreads > i; ++i) {
+  for (i = 1; nthreads > i; ++i) {
     pthread_join(threads[i], NULL);
   }
 

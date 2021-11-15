@@ -33,9 +33,9 @@ int q01 = 1; // id for the queue connecting stage 0 and stage 1, 1:N
 int q1c = 2; // id for the queue connecting stage 1 and correct, N:1
 int q1m = 3; // id for the queue connecting stage 1 and mistake, N:1
 int qp0 = 4; // id for the memory pool queue, 2:1
-uint64_t num_packets = 16;
-uint64_t num_correct;
-uint64_t num_mistake;
+volatile uint64_t num_packets = 16;
+volatile uint64_t num_correct;
+volatile uint64_t num_mistake;
 
 std::atomic<int> ready;
 
@@ -76,7 +76,26 @@ void stage0(int desired_core) {
 #endif
 
   ready++;
-  while ((3 + NUM_STAGE1) != ready.load()) { /** spin **/ };
+  while ((3 + NUM_STAGE1) != ready.load()) {
+    for (long i = 0; (10 * desired_core) > i; ++i) {
+      __asm__ volatile("\
+          nop \n\
+          nop \n\
+          nop \n\
+          nop \n\
+          nop \n\
+          nop \n\
+          nop \n\
+          nop \n\
+          nop \n\
+          nop \n\
+          "
+          :
+          :
+          :
+          );
+    }
+  };
 
   for (uint64_t i = 0; num_packets > i;) {
     // try to acquire packet header points from pool
@@ -163,7 +182,6 @@ void stage1(int desired_core) {
     printf("\033[91mFAILED:\033[0m %s(), T%d prodm\n", __func__, desired_core);
     return;
   }
-  const size_t bulk_size = BULK_SIZE * sizeof(Packet*);
 #elif CAF
   cafendpt_t cons, prodc, prodm;
   // open endpoints
@@ -182,12 +200,30 @@ void stage1(int desired_core) {
 #endif
 
   ready++;
-  while ((3 + NUM_STAGE1) != ready.load()) { /** spin **/ };
+  while ((3 + NUM_STAGE1) != ready.load()) {
+    for (long i = 0; (10 * desired_core) > i; ++i) {
+      __asm__ volatile("\
+          nop \n\
+          nop \n\
+          nop \n\
+          nop \n\
+          nop \n\
+          nop \n\
+          nop \n\
+          nop \n\
+          nop \n\
+          nop \n\
+          "
+          :
+          :
+          :
+          );
+    }
+  }
 
   while (!done) {
     // try to acquire a packet
 #ifdef VL
-    cnt = bulk_size;
     line_vl_pop_non(&cons, (uint8_t*)pkts, &cnt);
     cnt /= sizeof(Packet*);
 #elif CAF
@@ -223,20 +259,23 @@ void stage1(int desired_core) {
 #endif
         pktscidx = 0;
       }
-      if (BULK_SIZE == pktsmidx || MISTAKE_GATHER_RETRY <= mistake_cnt) {
+    }
+    if (BULK_SIZE == pktsmidx || MISTAKE_GATHER_RETRY <= mistake_cnt) {
 #ifdef VL
-        line_vl_push_weak(&prodm, (uint8_t*)pktsm, pktsmidx * sizeof(Packet*));
+      line_vl_push_weak(&prodm, (uint8_t*)pktsm, pktsmidx * sizeof(Packet*));
 #elif CAF
-        uint64_t i = 0; // sucessufully pushed count
-        do {
-          i += caf_push_bulk(&prodm, (uint64_t*)&pktsm[i], pktsmidx - i);
-        } while (i < pktsmidx);
+      uint64_t i = 0; // sucessufully pushed count
+      do {
+        i += caf_push_bulk(&prodm, (uint64_t*)&pktsm[i], pktsmidx - i);
+      } while (i < pktsmidx);
 #endif
-        pktsmidx = 0;
-        mistake_cnt = 0;
-      } else {
-        mistake_cnt++;
-      }
+      pktsmidx = 0;
+      mistake_cnt = 0;
+    } else {
+      mistake_cnt++;
+    }
+
+    if (cnt) {
       continue;
     }
 
@@ -274,7 +313,6 @@ void stage2correct(int desired_core) {
     printf("\033[91mFAILED:\033[0m %s(), T%d prod\n", __func__, desired_core);
     return;
   }
-  const size_t bulk_size = BULK_SIZE * sizeof(Packet*);
 #elif CAF
   cafendpt_t cons, prod;
   // open endpoints
@@ -289,12 +327,30 @@ void stage2correct(int desired_core) {
 #endif
 
   ready++;
-  while ((3 + NUM_STAGE1) != ready.load()) { /** spin **/ };
+  while ((3 + NUM_STAGE1) != ready.load()) {
+    for (long i = 0; (10 * desired_core) > i; ++i) {
+      __asm__ volatile("\
+          nop \n\
+          nop \n\
+          nop \n\
+          nop \n\
+          nop \n\
+          nop \n\
+          nop \n\
+          nop \n\
+          nop \n\
+          nop \n\
+          "
+          :
+          :
+          :
+          );
+    }
+  }
 
   while (!done) {
     // try to acquire a packet
 #ifdef VL
-    cnt = bulk_size;
     line_vl_pop_non(&cons, (uint8_t*)pkts, &cnt);
     cnt /= sizeof(Packet*);
 #elif CAF
@@ -304,7 +360,6 @@ void stage2correct(int desired_core) {
     if (cnt) { // pkts has valid pointers
       cnt_sum += cnt;
       // process header information
-      num_correct += cnt;
       for (uint64_t i = 0; cnt > i; ++i) {
 #ifdef CORRECT_READ
         if (pkts[i]->tcpheader.data.checksumTCP !=
@@ -368,7 +423,7 @@ void stage2mistake(int desired_core) {
     printf("\033[91mFAILED:\033[0m %s(), T%d prod\n", __func__, desired_core);
     return;
   }
-  const size_t bulk_size = BULK_SIZE * sizeof(Packet*);
+  const size_t bulk_size = 56;
   uint8_t *pktsbyte = (uint8_t*)pkts;
 #elif CAF
   cafendpt_t cons, prod;
@@ -384,15 +439,33 @@ void stage2mistake(int desired_core) {
 #endif
 
   ready++;
-  while ((3 + NUM_STAGE1) != ready.load()) { /** spin **/ };
+  while ((3 + NUM_STAGE1) != ready.load()) {
+    for (long i = 0; (10 * desired_core) > i; ++i) {
+      __asm__ volatile("\
+          nop \n\
+          nop \n\
+          nop \n\
+          nop \n\
+          nop \n\
+          nop \n\
+          nop \n\
+          nop \n\
+          nop \n\
+          nop \n\
+          "
+          :
+          :
+          :
+          );
+    }
+  }
 
   while (!done) {
     // try to acquire a packet
 #ifdef VL
-    cnt = bulk_size;
     line_vl_pop_non(&cons, (uint8_t*)pkts, &cnt);
     for (uint64_t j = 0; cnt < bulk_size && MISTAKE_GATHER_RETRY > j; ++j) {
-      size_t tmp = bulk_size - cnt;
+      size_t tmp;
       line_vl_pop_non(&cons, &pktsbyte[cnt], &tmp);
       cnt += tmp;
     }
@@ -448,7 +521,7 @@ int main(int argc, char *argv[]) {
 
   int core_id = 1;
   size_t cnt = 0;
-  Packet *pkts[BULK_SIZE] = { NULL };
+  Packet *pkts[BULK_SIZE << 1] = { NULL };
 
   if (1 < argc) {
     num_packets = atoi(argv[1]);
@@ -487,7 +560,7 @@ int main(int argc, char *argv[]) {
     printf("\033[91mFAILED:\033[0m %s(), prod\n", __func__);
     return -1;
   }
-  const size_t bulk_size = BULK_SIZE * sizeof(Packet*);
+  const size_t bulk_size = 56;
   uint8_t *pktsbyte = (uint8_t*)pkts;
 #elif CAF
   cafendpt_t cons, prod;
@@ -540,27 +613,53 @@ int main(int argc, char *argv[]) {
     i += j;
   }
 
-  while ((2 + NUM_STAGE1) != ready.load()) { /** spin **/ };
-  ready++;
+  while ((2 + NUM_STAGE1) != ready.load()) {
+    for (long i = 0; 10 > i; ++i) {
+      __asm__ volatile("\
+          nop \n\
+          nop \n\
+          nop \n\
+          nop \n\
+          nop \n\
+          nop \n\
+          nop \n\
+          nop \n\
+          nop \n\
+          nop \n\
+          "
+          :
+          :
+          :
+          );
+    }
+  };
 
   const uint64_t beg_tsc = rdtsc();
   const auto beg(high_resolution_clock::now());
+
+  ready++;
 
 #ifndef NOGEM5
   m5_reset_stats(0, 0);
 #endif
 
-  for (uint64_t i = 0; num_packets > i;) {
+#ifdef VL
+  size_t cnt_leftover = 0;
+#endif
+  size_t npkts2send = num_packets - POOL_SIZE;
+  size_t npktsrecvd = 0;
+  while (num_packets > npktsrecvd) {
     // try to acquire a packet
 #ifdef VL
-    cnt = bulk_size;
-    line_vl_pop_non(&cons, (uint8_t*)pkts, &cnt);
-    for (uint64_t j = 0; cnt < bulk_size && BULK_SIZE > j; ++j) {
-      size_t tmp = bulk_size - cnt;
-      line_vl_pop_non(&cons, &pktsbyte[cnt], &tmp);
-      cnt += tmp;
+    size_t tmp;
+    line_vl_pop_non(&cons, &pktsbyte[cnt_leftover], &tmp);
+    cnt_leftover += tmp;
+    if (cnt_leftover < bulk_size) {
+      line_vl_pop_non(&cons, &pktsbyte[cnt_leftover], &tmp);
+      cnt_leftover += tmp;
     }
-    cnt /= sizeof(Packet*);
+    cnt = (cnt_leftover > bulk_size) ?
+        BULK_SIZE : (cnt_leftover / sizeof(Packet*));
 #elif CAF
     cnt = caf_pop_bulk(&cons, (uint64_t*)pkts, BULK_SIZE);
     if (cnt < BULK_SIZE) {
@@ -568,8 +667,10 @@ int main(int argc, char *argv[]) {
     }
 #endif
 
-    if (cnt) { // valid packets pointers in pkts
-      for (uint64_t j = 0; cnt > j; ++j) {
+    size_t cnt2send = npkts2send > cnt ? cnt : npkts2send;
+    if (cnt2send) { // need to recycle some blocks for new packets
+      for (uint64_t j = 0; cnt2send > j; ++j) {
+        uint16_t i = npktsrecvd;
         pkts[j]->ipheader.data.srcIP = (uint16_t)i;
         pkts[j]->ipheader.data.dstIP = (uint16_t)j;
         pkts[j]->ipheader.data.checksumIP =
@@ -583,14 +684,25 @@ int main(int argc, char *argv[]) {
 #endif
       }
 #ifdef VL
-      line_vl_push_weak(&prod, (uint8_t*)pkts, cnt * sizeof(Packet*));
+      line_vl_push_weak(&prod, (uint8_t*)pkts, cnt2send * sizeof(Packet*));
 #elif CAF
       uint64_t j = 0; // successfully pushed count
       do {
         j += caf_push_bulk(&prod, (uint64_t*)&pkts[j], cnt - j);
-      } while (j < cnt);
+      } while (j < cnt2send);
 #endif
-      i += cnt;
+      npkts2send -= cnt2send;
+    }
+
+    if (cnt) { // there is valid pkts went through the whole loop
+      npktsrecvd += cnt;
+      cnt_leftover -= (cnt * sizeof(Packet*));
+      for (int k = (cnt_leftover / sizeof(Packet*)) - 1; 0 <= k; --k) {
+        pkts[k] = pkts[k + cnt];
+      }
+    }
+
+    if (cnt2send) {
       continue;
     }
 

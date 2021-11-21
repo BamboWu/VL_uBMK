@@ -74,7 +74,26 @@ void stage0(int desired_core) {
 #endif
 
   ready++;
-  while ((2 + NUM_STAGE1 + NUM_STAGE2) != ready.load()) { /** spin **/ };
+  while ((2 + NUM_STAGE1 + NUM_STAGE2) != ready.load()) {
+    for (long i = 0; (10 * desired_core) > i; ++i) {
+      __asm__ volatile("\
+          nop \n\
+          nop \n\
+          nop \n\
+          nop \n\
+          nop \n\
+          nop \n\
+          nop \n\
+          nop \n\
+          nop \n\
+          nop \n\
+          "
+          :
+          :
+          :
+          );
+    }
+  };
 
   for (uint64_t i = 0; num_packets > i;) {
     // try to acquire packet header points from pool
@@ -158,7 +177,26 @@ void stage1(int desired_core) {
 #endif
 
   ready++;
-  while ((2 + NUM_STAGE1 + NUM_STAGE2) != ready.load()) { /** spin **/ };
+  while ((2 + NUM_STAGE1 + NUM_STAGE2) != ready.load()) {
+    for (long i = 0; (10 * desired_core) > i; ++i) {
+      __asm__ volatile("\
+          nop \n\
+          nop \n\
+          nop \n\
+          nop \n\
+          nop \n\
+          nop \n\
+          nop \n\
+          nop \n\
+          nop \n\
+          nop \n\
+          "
+          :
+          :
+          :
+          );
+    }
+  }
 
   while (!done) {
     // try to acquire a packet
@@ -243,7 +281,26 @@ void stage2(int desired_core) {
 #endif
 
   ready++;
-  while ((2 + NUM_STAGE1 + NUM_STAGE2) != ready.load()) { /** spin **/ };
+  while ((2 + NUM_STAGE1 + NUM_STAGE2) != ready.load()) {
+    for (long i = 0; (10 * desired_core) > i; ++i) {
+      __asm__ volatile("\
+          nop \n\
+          nop \n\
+          nop \n\
+          nop \n\
+          nop \n\
+          nop \n\
+          nop \n\
+          nop \n\
+          nop \n\
+          nop \n\
+          "
+          :
+          :
+          :
+          );
+    }
+  }
 
   while (!done) {
     // try to acquire a packet
@@ -377,11 +434,31 @@ int main(int argc, char *argv[]) {
     i += j;
   }
 
-  while ((1 + NUM_STAGE1 + NUM_STAGE2) != ready.load()) { /** spin **/ };
-  ready++;
+  while ((1 + NUM_STAGE1 + NUM_STAGE2) != ready.load()) {
+    for (long i = 0; 10 > i; ++i) {
+      __asm__ volatile("\
+          nop \n\
+          nop \n\
+          nop \n\
+          nop \n\
+          nop \n\
+          nop \n\
+          nop \n\
+          nop \n\
+          nop \n\
+          nop \n\
+          "
+          :
+          :
+          :
+          );
+    }
+  };
 
   const uint64_t beg_tsc = rdtsc();
   const auto beg(high_resolution_clock::now());
+
+  ready++;
 
 #ifndef NOGEM5
   m5_reset_stats(0, 0);

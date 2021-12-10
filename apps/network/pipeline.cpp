@@ -418,22 +418,6 @@ int main(int argc, char *argv[]) {
   void *mempool = malloc(POOL_SIZE << 11); // POOL_SIZE 2KB memory blocks
   void *headerpool = malloc(POOL_SIZE * HEADER_SIZE);
 
-  // add allocated memory blocks into pool
-  for (int i = 0; POOL_SIZE > i;) {
-    size_t j = 0;
-    while (BULK_SIZE > j && POOL_SIZE > i) {
-      pkts[j] = (Packet*)((uint64_t)headerpool + (i * HEADER_SIZE));
-      pkts[j]->payload = (void*)((uint64_t)mempool + (i << 11));
-      j++;
-    }
-#ifdef VL
-    line_vl_push_strong(&prod, (uint8_t*)pkts, sizeof(Packet*) * j);
-#elif CAF
-    assert(j == caf_push_bulk(&prod, (uint64_t*)pkts, j));
-#endif
-    i += j;
-  }
-
   while ((1 + NUM_STAGE1 + NUM_STAGE2) != ready.load()) {
     for (long i = 0; 10 > i; ++i) {
       __asm__ volatile("\
@@ -464,7 +448,25 @@ int main(int argc, char *argv[]) {
   m5_reset_stats(0, 0);
 #endif
 
-  for (uint64_t i = 0; num_packets > i;) {
+  // add allocated memory blocks into pool
+  for (int i = 0; POOL_SIZE > i;) {
+    size_t j = 0;
+    while (BULK_SIZE > j && POOL_SIZE > i) {
+      pkts[j] = (Packet*)((uint64_t)headerpool + (i * HEADER_SIZE));
+      pkts[j]->payload = (void*)((uint64_t)mempool + (i << 11));
+      j++;
+    }
+#ifdef VL
+    line_vl_push_strong(&prod, (uint8_t*)pkts, sizeof(Packet*) * j);
+#elif CAF
+    assert(j == caf_push_bulk(&prod, (uint64_t*)pkts, j));
+#endif
+    i += j;
+  }
+
+  size_t ncnt2send = (num_packets - POOL_SIZE) * sizeof(Packet*);
+  size_t npktsrecvd = 0;
+  while (num_packets > npktsrecvd) {
     // try to acquire a packet
 #ifdef VL
     cnt = bulk_size;
@@ -474,16 +476,20 @@ int main(int argc, char *argv[]) {
 #endif
 
     if (cnt) { // valid packets pointers in pkts
+      if (ncnt2send) {
+        size_t cnt2send = (ncnt2send > cnt) ? cnt : ncnt2send;
 #ifdef VL
-      line_vl_push_weak(&prod, (uint8_t*)pkts, cnt);
-      cnt /= sizeof(Packet*);
+        line_vl_push_weak(&prod, (uint8_t*)pkts, cnt2send);
 #elif CAF
-      uint64_t j = 0; // successfully pushed count
-      do {
-        j += caf_push_bulk(&prod, (uint64_t*)&pkts[j], cnt - j);
-      } while (j < cnt);
+        uint64_t j = 0; // successfully pushed count
+        do {
+          j += caf_push_bulk(&prod, (uint64_t*)&pkts[j], ncnt2send - j);
+        } while (j < ncnt2send);
 #endif
-      i += cnt;
+        ncnt2send -= cnt2send;
+      }
+      cnt /= sizeof(Packet*);
+      npktsrecvd += cnt;
       continue;
     }
 

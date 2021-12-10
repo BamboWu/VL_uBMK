@@ -696,10 +696,12 @@ int main(int argc, char *argv[]) {
 
     if (cnt) { // there is valid pkts went through the whole loop
       npktsrecvd += cnt;
+#ifdef VL
       cnt_leftover -= (cnt * sizeof(Packet*));
       for (int k = (cnt_leftover / sizeof(Packet*)) - 1; 0 <= k; --k) {
         pkts[k] = pkts[k + cnt];
       }
+#endif
     }
 
     if (cnt2send) {

@@ -23,7 +23,13 @@ if(BOOST_ROOT)
 endif()
 
 # check libraries
+set(Boost_USE_STATIC_LIBS ON)
 find_package(Boost QUIET COMPONENTS atomic thread chrono)
+if (NOT Boost_FOUND)
+  MESSAGE(STATUS "No boost static library found, checking shared objects")
+  set(Boost_USE_STATIC_LIBS OFF)
+  find_package(Boost QUIET COMPONENTS atomic thread chrono)
+endif()
 find_package(GccAtomic QUIET)
 find_package(VL QUIET)
 find_package(ZMQ QUIET)

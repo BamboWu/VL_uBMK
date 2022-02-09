@@ -43,7 +43,7 @@ union {
 } volatile __attribute__((aligned(64))) lock = { .done = false };
 
 void stage0(int desired_core) {
-  setAffinity(desired_core);
+  pinAtCoreFromList(desired_core);
 
   size_t cnt = 0;
   Packet *pkts[BULK_SIZE] = { NULL };
@@ -139,7 +139,7 @@ void stage0(int desired_core) {
 }
 
 void stage1(int desired_core) {
-  setAffinity(desired_core);
+  pinAtCoreFromList(desired_core);
 
   uint16_t checksum = 0;
   uint64_t corrupted = 0;
@@ -243,7 +243,7 @@ void stage1(int desired_core) {
 }
 
 void stage2(int desired_core) {
-  setAffinity(desired_core);
+  pinAtCoreFromList(desired_core);
 
   uint16_t checksum = 0;
   uint64_t corrupted = 0;
@@ -349,7 +349,7 @@ void stage2(int desired_core) {
 
 int main(int argc, char *argv[]) {
 
-  setAffinity(0);
+  char core_list[] = "0-3";
 
   int core_id = 1;
   size_t cnt = 0;
@@ -358,6 +358,12 @@ int main(int argc, char *argv[]) {
   if (1 < argc) {
     num_packets = atoi(argv[1]);
   }
+  if (2 < argc) {
+    parseCoreList(argv[2]);
+  } else {
+    parseCoreList(core_list);
+  }
+  pinAtCoreFromList(0);
   printf("%s 1-%d-%d-1 %d bulk %lu pkts %d pool\n",
          argv[0], NUM_STAGE1, NUM_STAGE2, BULK_SIZE, num_packets, POOL_SIZE);
 

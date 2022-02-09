@@ -83,7 +83,7 @@ uint64_t roundup64(const uint64_t val) {
 }
 
 void slave(const int desired_core) {
-  setAffinity(desired_core);
+  pinAtCoreFromList(desired_core);
   int *arr = arr_base;
   const uint64_t len = arr_len;
   const uint64_t mini_task_len = 1 << MINI_TASK_EXP;
@@ -328,7 +328,7 @@ void slave(const int desired_core) {
 
 /* Sort an array */
 void sort(int *arr, const uint64_t len, const int num_consumer_lines) {
-  setAffinity(0);
+  pinAtCoreFromList(0);
   int core_id = 1;
   uint64_t task_beg;
   uint8_t task_exp;
@@ -744,11 +744,17 @@ void sort(int *arr, const uint64_t len, const int num_consumer_lines) {
 int main(int argc, char *argv[]) {
   uint64_t len = 16;
   int num_consumer_lines = 16; // number of the consumer cachelines for master
+  char core_list[] = "0-3";
   if (1 < argc) {
     len = strtoull(argv[1], NULL, 0);
     if (2 < argc) {
       num_consumer_lines = atoi(argv[2]);
     }
+  }
+  if (3 < argc) {
+      parseCoreList(argv[3]);
+  } else {
+      parseCoreList(core_list);
   }
   const uint64_t len_roundup = roundup64(len);
   int *arr = (int*) memalign(64, len_roundup * sizeof(int));

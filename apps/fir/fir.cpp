@@ -226,7 +226,7 @@ input_stream(
     unsigned int num_threads,
     unsigned int aff
 ){
-    setAffinity(aff);
+    pinAtCoreFromList(aff);
     unsigned int t_samples(samples);
     srand (256);
     ready++;
@@ -261,7 +261,7 @@ queued_fir(
     unsigned int num_threads,
     unsigned int aff
 ){
-    setAffinity(aff);
+    pinAtCoreFromList(aff);
 
     unsigned int t_samples(samples);
 
@@ -304,7 +304,7 @@ output_stream(
     unsigned int num_threads,
     unsigned int aff
 ){
-    setAffinity(aff);
+    pinAtCoreFromList(aff);
 
     unsigned int t_samples(samples);
     data_t output_data;
@@ -326,6 +326,7 @@ int main( int argc, char **argv )
     unsigned int aff     = 1;
     unsigned int stages  = 2;
     unsigned int samples = 100;
+    char core_list[] = "1-3";
 
     if( 1 < argc )
     {
@@ -334,6 +335,13 @@ int main( int argc, char **argv )
     if( 2 < argc )
     {
         samples = atoll( argv[2] );
+    }
+    if( 3 < argc )
+    {
+        parseCoreList(argv[3]);
+    } else
+    {
+        parseCoreList(core_list);
     }
     std::cout << argv[0] << " FIR stages = " << stages << ", samples = " << samples << "\n" ;
 #ifdef VL

@@ -13,6 +13,9 @@
 extern "C" {
 #endif
 
+extern int parseCoreList(const char *core_list_str);
+extern void pinAtCoreFromList(const int idx);
+
 extern void setAffinity(const int desired_core);
 extern void nameThread(const char *desired_name);
 

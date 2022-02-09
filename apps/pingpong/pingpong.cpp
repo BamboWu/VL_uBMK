@@ -254,7 +254,7 @@ struct alignas( 64 ) /** align to 64B boundary **/ playerArgs
 void
 ping( playerArgs const * const pargs, atomic_t &ready )
 {
-    setAffinity( 0 );
+    pinAtCoreFromList(0);
 
     auto round( pargs->round );
 
@@ -299,7 +299,7 @@ void
 pong( playerArgs const * const pargs, atomic_t &ready )
 {
 
-    setAffinity( 1 );
+    pinAtCoreFromList(1);
 
     auto round( pargs->round );
 
@@ -330,16 +330,21 @@ pong( playerArgs const * const pargs, atomic_t &ready )
 
 int main( int argc, char **argv )
 {
+    setAffinity(0);
     uint64_t burst = 7;
     uint64_t round = 10;
+    char core_list[] = "1-2";
 
-    if( 2 < argc )
-    {
-        burst = atoll( argv[2] );
+    if (3 < argc) {
+        parseCoreList(argv[3]);
+    } else {
+        parseCoreList(core_list);
     }
-    if( 1 < argc )
-    {
-        round = atoll( argv[1] );
+    if (2 < argc) {
+        burst = atoll(argv[2]);
+    }
+    if (1 < argc) {
+        round = atoll(argv[1]);
     }
     std::cout << argv[0] << " round=" << round << " burst=" << burst << "\n";
 

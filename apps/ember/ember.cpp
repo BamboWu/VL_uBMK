@@ -599,7 +599,7 @@ void incast(const bool isMaster,
 
 void *worker(void *arg) {
   int *pid = (int*) arg;
-  setAffinity(*pid);
+  pinAtCoreFromList(*pid);
 
   bool isMaster = (0 == *pid);
 #ifdef EMBER_INCAST
@@ -823,6 +823,7 @@ int main(int argc, char* argv[]) {
   fast_period = 1;
   slow_period = 1;
   master_cacheline = 32;
+  parseCoreList("0-3");
   for (i = 0; argc > i; ++i) {
     if (0 == strcmp("-pex", argv[i])) {
       pex = atoi(argv[i + 1]);
@@ -854,8 +855,12 @@ int main(int argc, char* argv[]) {
     } else if (0 == strcmp("-master_cacheline", argv[i])) {
       master_cacheline = atoi(argv[i + 1]);
       ++i;
+    } else if (0 == strcmp("-core_list", argv[i])) {
+      parseCoreList(argv[i + 1]);
+      ++i;
     }
   }
+  pinAtCoreFromList(0);
   printf("Px x Py:        %4d x %4d\n", pex, pey);
   printf("Message Size:         %5d\n", msgSz);
   printf("Iterations:           %5d\n", repeats);

@@ -11,8 +11,6 @@ if(VL_FOUND)
   include_directories(${VL_INCLUDE_DIR})
 endif()
 
-find_file(Boost_LOCKFREE_QUEUE_HPP "boost/lockfree/queue.hpp" ${Boost_INCLUDE_DIRS})
-
 if(NOT (Boost_ATOMIC_FOUND OR GCCLIBATOMIC_FOUND))
   MESSAGE(STATUS "WARNING: No atomic library, skip fir.")
 else()

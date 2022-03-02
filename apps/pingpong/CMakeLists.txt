@@ -13,7 +13,8 @@ if(CAF_FOUND)
   include_directories(${CAF_INCLUDE_DIR})
 endif()
 
-find_file(Boost_LOCKFREE_QUEUE_HPP "boost/lockfree/queue.hpp" ${Boost_INCLUDE_DIRS})
+find_file(Boost_LOCKFREE_QUEUE_HPP "boost/lockfree/queue.hpp"
+    PATH ${Boost_INCLUDE_DIRS} NO_DEFAULT_PATH)
 
 if(NOT (Boost_ATOMIC_FOUND OR GCCLIBATOMIC_FOUND))
   MESSAGE(STATUS "WARNING: No atomic library, skip pingpong.")

@@ -8,12 +8,6 @@
 #include <atomic>
 #include <sstream>
 
-#ifndef STDTHREAD
-#include <boost/thread.hpp>
-#else
-#include <thread>
-#endif
-
 #include <chrono>
 using std::chrono::high_resolution_clock;
 using std::chrono::duration_cast;
@@ -35,12 +29,6 @@ using std::chrono::nanoseconds;
 
 #ifndef NOGEM5
 #include "gem5/m5ops.h"
-#endif
-
-#ifndef STDTHREAD
-using boost::thread;
-#else
-using std::thread;
 #endif
 
 #ifdef VL
@@ -82,8 +70,9 @@ uint64_t roundup64(const uint64_t val) {
   return ++val64;
 }
 
-void slave(const int desired_core) {
-  pinAtCoreFromList(desired_core);
+void* slave(void* args) {
+  const int desired_core = (uint64_t) args;
+  //pinAtCoreFromList(desired_core);
   int *arr = arr_base;
   const uint64_t len = arr_len;
   const uint64_t mini_task_len = 1 << MINI_TASK_EXP;
@@ -104,12 +93,12 @@ void slave(const int desired_core) {
   // open endpoints
   if ((errorcode = open_byte_vl_as_consumer(tosort_fd, &tosort_cons, 1))) {
     printf("\033[91mFAILED:\033[0m %s(), tosort_cons\n", __func__);
-    return;
+    return NULL;
   }
   if ((errorcode = open_byte_vl_as_producer(topair_fd, &topair_prod,
           (65536 >> MINI_TASK_EXP) / (NUM_SLAVES + 1)))) {
     printf("\033[91mFAILED:\033[0m %s(), topair_prod\n", __func__);
-    return;
+    return NULL;
   }
 #elif ZMQ
   const size_t msg_size = sizeof(msg);
@@ -127,7 +116,7 @@ void slave(const int desired_core) {
   if ((errorcode = open_byte_vl_as_producer(tosort_fd, &tosort_prod,
           (65536 >> MINI_TASK_EXP) / (NUM_SLAVES + 1)))) {
     printf("\033[91mFAILED:\033[0m %s(), tosort_prod\n", __func__);
-    return;
+    return NULL;
   }
 #endif
 
@@ -324,6 +313,7 @@ void slave(const int desired_core) {
 #if defined(VL) && defined(INIT_RELOAD)
   delete[] icnts;
 #endif
+  return NULL;
 }
 
 /* Sort an array */
@@ -392,12 +382,13 @@ void sort(int *arr, const uint64_t len, const int num_consumer_lines) {
 #ifdef DBG
   oss.emplace_back(std::ostringstream::ate);
 #endif
-  std::vector<thread> slave_threads;
+  pthread_t slave_threads[NUM_SLAVES];
   for (int i = 0; NUM_SLAVES > i; ++i) {
 #ifdef DBG
     oss.emplace_back(std::ostringstream::ate);
 #endif
-    slave_threads.push_back(thread(slave, core_id++));
+    threadCreate(&slave_threads[i], NULL, slave, (void *)core_id, core_id);
+    core_id++;
   }
 
   const uint64_t cnt_len = len >> MINI_TASK_EXP;
@@ -731,7 +722,7 @@ void sort(int *arr, const uint64_t len, const int num_consumer_lines) {
   delete[] bcnts;
 
   for (int i = NUM_SLAVES - 1; 0 <= i; --i) {
-    slave_threads[i].join();
+    pthread_join(slave_threads[i], NULL);
   }
 #ifdef DBG
   for (int i = 0; NUM_SLAVES >= i; ++i) {

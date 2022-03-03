@@ -14,6 +14,8 @@ extern "C" {
 #endif
 
 extern int parseCoreList(const char *core_list_str);
+extern void threadCreate(pthread_t* hdl, pthread_attr_t* attr,
+        void* (*func)(void*), void* args, int idx);
 extern void pinAtCoreFromList(const int idx);
 
 extern void setAffinity(const int desired_core);

@@ -41,7 +41,7 @@
 #include "gem5/m5ops.h"
 #endif
 
-#define NUM_CORES 16 
+#define NUM_CORES 16
 #define CAPACITY 4096
 #define TAPS_FIR 16
 
@@ -51,11 +51,7 @@ using atomic_t = boost::atomic< unsigned int >;
 using atomic_t = std::atomic< unsigned int >;
 #endif
 
-#ifndef STDTHREAD
-using boost::thread;
-#else
-using std::thread;
-#endif
+atomic_t ready;
 
 #ifndef STDCHRONO
 using boost::chrono::high_resolution_clock;
@@ -211,27 +207,42 @@ data_t FIR::filter(data_t input)
     return output;
 }
 
+unsigned int samples_g;
 
-void
-input_stream(
+void*
+input_stream(void* args){
 #ifdef VL
-    vl_q_t* q_out,
+    vl_q_t* q_out = (vl_q_t*) args;
 #elif ZMQ
-    zmq_q_t* q_out,
-#else 
-    boost_q_t* q_out,
+    zmq_q_t* q_out = (zmq_q_t*) args;
+#else
+    boost_q_t* q_out = (boost_q_t*) args;
 #endif
-    unsigned int samples,
-    atomic_t &ready,
-    unsigned int num_threads,
-    unsigned int aff
-){
-    pinAtCoreFromList(aff);
-    unsigned int t_samples(samples);
+    unsigned int samples_t = samples_g;
     srand (256);
-    ready++;
-    while( ready != num_threads ){ /** spin **/ };
-    while(t_samples--)
+    ready--;
+    while( 0 != ready.load() ){ /** spin **/
+        __asm__ volatile("\
+            nop \n\
+            nop \n\
+            nop \n\
+            nop \n\
+            nop \n\
+            nop \n\
+            nop \n\
+            nop \n\
+            nop \n\
+            nop \n\
+            nop \n\
+            nop \n\
+            nop \n\
+            "
+            :
+            :
+            :
+            );
+    };
+    while(samples_t--)
     {
         data_t input_data = (data_t)(rand() % 1000);
         while(!q_out->bounded_push(input_data)){
@@ -241,101 +252,120 @@ input_stream(
 #ifdef VL
     q_out->flush();
 #endif
-    return; 
+    return NULL;
 }
 
-void
-queued_fir(
+struct firArgs {
 #ifdef VL
-    vl_q_t* q_in,
-    vl_q_t* q_out,
+    vl_q_t* q_in;
+    vl_q_t* q_out;
 #elif ZMQ
-    zmq_q_t* q_in,
-    zmq_q_t* q_out,
-#else 
-    boost_q_t* q_in,
-    boost_q_t* q_out,
+    zmq_q_t* q_in;
+    zmq_q_t* q_out;
+#else
+    boost_q_t* q_in;
+    boost_q_t* q_out;
 #endif
-    unsigned int samples,
-    atomic_t &ready,
-    unsigned int num_threads,
-    unsigned int aff
-){
-    pinAtCoreFromList(aff);
+};
 
-    unsigned int t_samples(samples);
+void*
+queued_fir(void* args){
+    firArgs* fir_args = (firArgs*) args;
+    unsigned int samples_t = samples_g;
 
     data_t coeffs[TAPS_FIR] =  {0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8,
                                 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1};
 
     FIR *fir1= new FIR(coeffs, TAPS_FIR);
     data_t input_data;
-    ready++;
-    while( ready != num_threads ){ /** spin **/ };
-    while(t_samples--)
+    ready--;
+    while( 0 != ready.load() ){ /** spin **/
+      for (long i = ready.load() + 7; 0 <= i; --i) {
+        __asm__ volatile("\
+            nop \n\
+            nop \n\
+            nop \n\
+            nop \n\
+            nop \n\
+            nop \n\
+            nop \n\
+            "
+            :
+            :
+            :
+            );
+      }
+    };
+    while(samples_t--)
     {
-        while(!q_in->pop(input_data)){
+        while(!fir_args->q_in->pop(input_data)){
             sched_yield();
         }
         data_t output_data = fir1->filter(input_data);
-        while(!q_out->bounded_push(output_data)){
+        while(!fir_args->q_out->bounded_push(output_data)){
             sched_yield();
         }
     }
 #ifdef VL
-    q_out->flush();
+    fir_args->q_out->flush();
 #endif
     delete fir1;
-    return; 
+    return NULL;
 }
 
-
-void
-output_stream(
+void*
+output_stream(void* args){
 #ifdef VL
-    vl_q_t* q_in,
+    vl_q_t* q_in = (vl_q_t*) args;
 #elif ZMQ
-    zmq_q_t* q_in,
-#else 
-    boost_q_t* q_in,
+    zmq_q_t* q_in = (zmq_q_t*) args;
+#else
+    boost_q_t* q_in = (boost_q_t*) args;
 #endif
-    unsigned int samples,
-    atomic_t &ready,
-    unsigned int num_threads,
-    unsigned int aff
-){
-    pinAtCoreFromList(aff);
-
-    unsigned int t_samples(samples);
+    unsigned int samples_t = samples_g;
     data_t output_data;
-    ready++;
-    while( ready != num_threads ){ /** spin **/ };
-    while(t_samples--)
+    ready--;
+    while( 0 != ready.load() ){ /** spin **/
+        __asm__ volatile("\
+            nop \n\
+            nop \n\
+            nop \n\
+            nop \n\
+            nop \n\
+            nop \n\
+            nop \n\
+            nop \n\
+            nop \n\
+            nop \n\
+            nop \n\
+            nop \n\
+            nop \n\
+            nop \n\
+            nop \n\
+            nop \n\
+            nop \n\
+            "
+            :
+            :
+            :
+            );
+    };
+    while(samples_t--)
     {
         while(!q_in->pop(output_data)){
             sched_yield();
         }
-	//std::cout << output_data << std::endl;
     }
-    return; 
+    return NULL;
 }
 
 int main( int argc, char **argv )
 {
-    setAffinity(0);
     unsigned int aff     = 1;
     unsigned int stages  = 2;
     unsigned int samples = 100;
     char core_list[] = "1-3";
 
-    if( 1 < argc )
-    {
-        stages = atoll( argv[1] );
-    }
-    if( 2 < argc )
-    {
-        samples = atoll( argv[2] );
-    }
     if( 3 < argc )
     {
         parseCoreList(argv[3]);
@@ -343,7 +373,19 @@ int main( int argc, char **argv )
     {
         parseCoreList(core_list);
     }
-    std::cout << argv[0] << " FIR stages = " << stages << ", samples = " << samples << "\n" ;
+    pinAtCoreFromList(0);
+    if( 2 < argc )
+    {
+        samples = atoll( argv[2] );
+    }
+    if( 1 < argc )
+    {
+        stages = atoll( argv[1] );
+    }
+    std::cout << argv[0] << " FIR stages = " << stages <<
+        ", samples = " << samples << "\n" ;
+    ready = stages + 3; // stages of fir_threads and 1 output, 1 input and this
+    samples_g = samples;
 #ifdef VL
     int* fds;
     fds  = new int [stages+1];
@@ -351,7 +393,7 @@ int main( int argc, char **argv )
     vl_q_t* c_qs;
     p_qs = new vl_q_t [stages+1];
     c_qs = new vl_q_t [stages+1];
-    
+
     for(unsigned int i=0; i <= stages; i++){
         fds[i] = mkvl();
         if (0 > fds[i]) {
@@ -372,75 +414,85 @@ int main( int argc, char **argv )
         q->open(val, true);
         qs.push_back(q);
     }
-#else 
+#else
     std::vector<boost_q_t*> qs;
     for (unsigned int i=0; i < stages+1; i++){
         const auto q = new boost_q_t( CAPACITY / sizeof(data_t) );
         qs.push_back(q);
     }
 #endif
-    atomic_t ready(-1);
 
-    thread t_output(
-		    output_stream,
+    pthread_t t_output;
+    threadCreate(&t_output, NULL, output_stream,
 #ifdef VL
-                    &c_qs[stages],
+                 (void*)&c_qs[stages],
 #else
-                    qs[stages],
+                 (void*)qs[stages],
 #endif
-                    samples,
-                    std::ref(ready),
-                    stages+2,
-		    aff%NUM_CORES);
-    aff++;
+                 aff++
+                );
 
-    std::vector<thread> fir_threads;
+    pthread_t fir_threads[stages];
+    firArgs fir_args[stages];
     for (unsigned int i=0; i < stages; i++){
-        fir_threads.push_back(
-			      thread(queued_fir,
+        fir_args[i].q_in =
 #ifdef VL
-                              &c_qs[i],
-                              &p_qs[i+1],
-#else 
-                              qs[i],
-                              qs[i+1],
+                     &c_qs[i];
+#else
+                     qs[i];
 #endif
-                              samples,
-                              std::ref(ready),
-                              stages+2,
-			      aff%NUM_CORES));
-	aff++;
+        fir_args[i].q_out =
+#ifdef VL
+                     &p_qs[i+1];
+#else
+                     qs[i+1];
+#endif
+
+        threadCreate(&fir_threads[i], NULL, queued_fir,
+                     (void*)&fir_args[i], aff++);
     }
 
-    thread t_input(
-		    input_stream,
+    pthread_t t_input;
+    threadCreate(&t_input, NULL, input_stream,
 #ifdef VL
-                    &p_qs[0],
-#else 
-                    qs[0],
+                 (void*)&p_qs[0],
+#else
+                 (void*)qs[0],
 #endif
-                    samples,
-                    std::ref(ready),
-                    stages+2,
-		    aff%NUM_CORES);
-    aff++;
+                 aff++
+                );
 
-    std::cout << "On Your Mark! Get Set! Go!\n";
+    while (1 != ready.load()) { /* spin */
+        __asm__ volatile("\
+            nop \n\
+            nop \n\
+            nop \n\
+            nop \n\
+            nop \n\
+            nop \n\
+            nop \n\
+            nop \n\
+            nop \n\
+            nop \n\
+            "
+            :
+            :
+            :
+            );
+    }
 #ifndef NOGEM5
     m5_reset_stats(0, 0);
 #endif
 
-    ready++;
+    ready--;
+    std::cout << "GO\n";
 
-    t_input.join();
-    auto fir_ptr = fir_threads.begin();
-    while (fir_ptr != fir_threads.end())
+    pthread_join(t_input, NULL);
+    for (unsigned int i=0; i < stages; i++)
     {
-        fir_ptr->join();
-        fir_ptr++;
+        pthread_join(fir_threads[i], NULL);
     }
-    //fir_ptr->join();
-    t_output.join();
+    pthread_join(t_output, NULL);
 
 #ifndef NOGEM5
     m5_dump_reset_stats(0, 0);

@@ -9,11 +9,6 @@
 #else
 #include <atomic>
 #endif
-#ifndef STDTHREAD
-#include <boost/thread.hpp>
-#else
-#include <thread>
-#endif
 #ifndef STDCHRONO
 #include <boost/chrono.hpp>
 #else
@@ -54,12 +49,7 @@ using atomic_t = boost::atomic< int >;
 #else
 using atomic_t = std::atomic< int >;
 #endif
-
-#ifndef STDTHREAD
-using boost::thread;
-#else
-using std::thread;
-#endif
+atomic_t ready;
 
 #ifndef STDCHRONO
 using boost::chrono::high_resolution_clock;
@@ -251,10 +241,10 @@ struct alignas( 64 ) /** align to 64B boundary **/ playerArgs
 #endif
 };
 
-void
-ping( playerArgs const * const pargs, atomic_t &ready )
+void*
+ping( void* args )
 {
-    pinAtCoreFromList(0);
+    playerArgs const * pargs = (playerArgs const *) args;
 
     auto round( pargs->round );
 
@@ -292,45 +282,11 @@ ping( playerArgs const * const pargs, atomic_t &ready )
         }
         ball.val += 256;
     }
-    return; /** end of player function **/
-}
-
-void
-pong( playerArgs const * const pargs, atomic_t &ready )
-{
-
-    pinAtCoreFromList(1);
-
-    auto round( pargs->round );
-
-    std::uint64_t const burst( pargs->burst );
-
-    auto * const psend( pargs->qmiso );
-    auto * const precv( pargs->qmosi );
-    
-    ball_t ball;
-
-    /** we're ready to start **/
-    ready++;
-
-    while( ready != 2 ){ /** spin **/ };
-
-
-    /** we're ready to get started, both initialized **/
-
-    while( round-- )
-    {
-        for (std::uint64_t i = 0; i < burst; ++i) {
-          while( ! precv->pop( ball ) );
-          while( ! psend->push( ball ) );
-        }
-    }
-    return; /** end of player function **/
+    return NULL; /** end of player function **/
 }
 
 int main( int argc, char **argv )
 {
-    setAffinity(0);
     uint64_t burst = 7;
     uint64_t round = 10;
     char core_list[] = "1-2";
@@ -340,6 +296,7 @@ int main( int argc, char **argv )
     } else {
         parseCoreList(core_list);
     }
+    pinAtCoreFromList(0);
     if (2 < argc) {
         burst = atoll(argv[2]);
     }
@@ -420,33 +377,55 @@ int main( int argc, char **argv )
     args[1].qmiso   = &miso_boost;
 #endif
 
-    thread playerm( ping, &args[0], std::ref( ready ) );
-    thread players( pong, &args[1], std::ref( ready ) );
+    ready = 0;
+    pthread_t player_ping;
+    threadCreate(&player_ping, NULL, ping, (void*)&args[0], 1);
 
-    const uint64_t beg_tsc = rdtsc();
-    const auto beg( high_resolution_clock::now() );
+    { /* partially from pong() */
+        playerArgs* pargs = &args[1];
+
+        auto round( pargs->round );
+
+        std::uint64_t const burst( pargs->burst );
+
+        auto * const psend( pargs->qmiso );
+        auto * const precv( pargs->qmosi );
+
+        ball_t ball;
+
+        while (1 != ready.load()) { /* spin */ }
+
+        const uint64_t beg_tsc = rdtsc();
+        const auto beg( high_resolution_clock::now() );
 
 #ifndef NOGEM5
-    m5_reset_stats(0, 0);
+        m5_reset_stats(0, 0);
 #endif
 
-    ready++;
+        ready++;
 
-    playerm.join();
-    players.join();
+        while( round-- )
+        {
+            for (std::uint64_t i = 0; i < burst; ++i) {
+              while( ! precv->pop( ball ) );
+              while( ! psend->push( ball ) );
+            }
+        }
+        pthread_join(player_ping, NULL);
 
 #ifndef NOGEM5
-    m5_dump_reset_stats(0, 0);
+        m5_dump_reset_stats(0, 0);
 #endif
 
-    const uint64_t end_tsc = rdtsc();
-    const auto end( high_resolution_clock::now() );
-    const auto elapsed( duration_cast< nanoseconds >( end - beg ) );
+        const uint64_t end_tsc = rdtsc();
+        const auto end( high_resolution_clock::now() );
+        const auto elapsed( duration_cast< nanoseconds >( end - beg ) );
 
-    std::cout << ( end_tsc - beg_tsc ) << " ticks elapsed\n";
-    std::cout << elapsed.count() << " ns elapsed\n";
-    std::cout << elapsed.count() / round << " ns average per round (" <<
-      burst << " pushs " << burst << " pops)\n";
+        std::cout << ( end_tsc - beg_tsc ) << " ticks elapsed\n";
+        std::cout << elapsed.count() << " ns elapsed\n";
+        std::cout << elapsed.count() / round << " ns average per round (" <<
+          burst << " pushs " << burst << " pops)\n";
+    }
 
 #ifdef VL
     // TODO: rmvl();

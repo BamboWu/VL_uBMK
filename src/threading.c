@@ -14,10 +14,11 @@
 #define BUFFER_LENGTH 1000
 
 #define CORE_LIST_LEN 128
-#define NUM_CPU_SETS 128
+#define NUM_THREAD_PRESETS 128
 
 static int core_list[CORE_LIST_LEN];
-static cpu_set_t cpu_sets[NUM_CPU_SETS] = {0};
+static cpu_set_t cpu_sets[NUM_THREAD_PRESETS] = {0};
+static pthread_attr_t attrs[NUM_THREAD_PRESETS];
 static int core_list_max = 0;
 
 /*
@@ -71,9 +72,29 @@ int parseCoreList(const char *core_list_str) {
 }
 
 /*
+ * Create a thread with affinity as indexed
+ */
+void threadCreate(pthread_t* hdl, pthread_attr_t* attr, void* (*func)(void*),
+        void* args, int idx) {
+  if (idx >= NUM_THREAD_PRESETS) {
+    perror("Exceeds the NUM_THREAD_PRESETS limitation\n");
+  }
+  CPU_SET(core_list[idx % core_list_max], &cpu_sets[idx]);
+  if (NULL != attr) {
+    pthread_attr_setaffinity_np(attr, sizeof(cpu_sets[idx]),
+            &cpu_sets[idx]);
+    pthread_create(hdl, attr, func, args);
+  } else {
+    pthread_attr_setaffinity_np(&attrs[idx], sizeof(cpu_sets[idx]),
+            &cpu_sets[idx]);
+    pthread_create(hdl, &attrs[idx], func, args);
+  }
+}
+
+/*
  * Bind a thread to the specified core.
 */
-void setAffinityWithCPUSet(cpu_set_t* cpuset) {
+static void setAffinityWithCPUSet(cpu_set_t* cpuset) {
   int cpu_allocate_size = -1;
 #if (__GLIBC_MINOR__ > 9) && (__GLIBC__ == 2)
   const int processors_to_allocate = 1;
@@ -100,8 +121,8 @@ void setAffinityWithCPUSet(cpu_set_t* cpuset) {
  * Pin a thread to the core specified in the core list at a certain index
  */
 void pinAtCoreFromList(const int idx) {
-  if (idx >= NUM_CPU_SETS) {
-    perror("Exceeds the NUM_CPU_SETS limitation\n");
+  if (idx >= NUM_THREAD_PRESETS) {
+    perror("Exceeds the NUM_THREAD_PRESETS limitation\n");
   }
   CPU_SET(core_list[idx % core_list_max], &cpu_sets[idx]);
   setAffinityWithCPUSet(&cpu_sets[idx]);

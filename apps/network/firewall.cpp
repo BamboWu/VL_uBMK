@@ -1,5 +1,4 @@
 #include <iostream>
-#include <thread>
 #include <chrono>
 #include <atomic>
 #include <vector>
@@ -12,7 +11,6 @@
 #include "timing.h"
 #include "utils.hpp"
 
-using std::thread;
 using std::chrono::high_resolution_clock;
 using std::chrono::duration_cast;
 using std::chrono::nanoseconds;
@@ -149,7 +147,8 @@ void stage0(int desired_core) {
 
 }
 
-void stage1(int desired_core) {
+void* stage1(void* args) {
+  int desired_core = (uint64_t) args;
   pinAtCoreFromList(desired_core);
 
   uint16_t checksum = 0;
@@ -172,30 +171,30 @@ void stage1(int desired_core) {
   // open endpoints
   if (open_byte_vl_as_consumer(q01, &cons, 1)) {
     printf("\033[91mFAILED:\033[0m %s(), T%d cons\n", __func__, desired_core);
-    return;
+    return NULL;
   }
   if (open_byte_vl_as_producer(q1c, &prodc, 1)) {
     printf("\033[91mFAILED:\033[0m %s(), T%d prodc\n", __func__, desired_core);
-    return;
+    return NULL;
   }
   if (open_byte_vl_as_producer(q1m, &prodm, 1)) {
     printf("\033[91mFAILED:\033[0m %s(), T%d prodm\n", __func__, desired_core);
-    return;
+    return NULL;
   }
 #elif CAF
   cafendpt_t cons, prodc, prodm;
   // open endpoints
   if (open_caf(q01, &cons)) {
     printf("\033[91mFAILED:\033[0m %s(), T%d cons\n", __func__, desired_core);
-    return;
+    return NULL;
   }
   if (open_caf(q1c, &prodc)) {
     printf("\033[91mFAILED:\033[0m %s(), T%d prodc\n", __func__, desired_core);
-    return;
+    return NULL;
   }
   if (open_caf(q1m, &prodm)) {
     printf("\033[91mFAILED:\033[0m %s(), T%d prodm\n", __func__, desired_core);
-    return;
+    return NULL;
   }
 #endif
 
@@ -286,9 +285,11 @@ void stage1(int desired_core) {
 #endif
   }
 
+  return NULL;
 }
 
-void stage2correct(int desired_core) {
+void* stage2correct(void* args) {
+  int desired_core = (uint64_t) args;
   pinAtCoreFromList(desired_core);
 
   uint16_t checksum = 0;
@@ -307,22 +308,22 @@ void stage2correct(int desired_core) {
   // open endpoints
   if (open_byte_vl_as_consumer(q1c, &cons, 1)) {
     printf("\033[91mFAILED:\033[0m %s(), T%d cons\n", __func__, desired_core);
-    return;
+    return NULL;
   }
   if (open_byte_vl_as_producer(qp0, &prod, 1)) {
     printf("\033[91mFAILED:\033[0m %s(), T%d prod\n", __func__, desired_core);
-    return;
+    return NULL;
   }
 #elif CAF
   cafendpt_t cons, prod;
   // open endpoints
   if (open_caf(q1c, &cons)) {
     printf("\033[91mFAILED:\033[0m %s(), T%d cons\n", __func__, desired_core);
-    return;
+    return NULL;
   }
   if (open_caf(qp0, &prod)) {
     printf("\033[91mFAILED:\033[0m %s(), T%d prod\n", __func__, desired_core);
-    return;
+    return NULL;
   }
 #endif
 
@@ -396,9 +397,11 @@ void stage2correct(int desired_core) {
 
   num_correct = cnt_sum;
 
+  return NULL;
 }
 
-void stage2mistake(int desired_core) {
+void* stage2mistake(void* args) {
+  int desired_core = (uint64_t) args;
   pinAtCoreFromList(desired_core);
 
   uint16_t checksum = 0;
@@ -417,11 +420,11 @@ void stage2mistake(int desired_core) {
   // open endpoints
   if (open_byte_vl_as_consumer(q1m, &cons, 1)) {
     printf("\033[91mFAILED:\033[0m %s(), T%d cons\n", __func__, desired_core);
-    return;
+    return NULL;
   }
   if (open_byte_vl_as_producer(qp0, &prod, 1)) {
     printf("\033[91mFAILED:\033[0m %s(), T%d prod\n", __func__, desired_core);
-    return;
+    return NULL;
   }
   const size_t bulk_size = 56;
   uint8_t *pktsbyte = (uint8_t*)pkts;
@@ -430,11 +433,11 @@ void stage2mistake(int desired_core) {
   // open endpoints
   if (open_caf(q1m, &cons)) {
     printf("\033[91mFAILED:\033[0m %s(), T%d cons\n", __func__, desired_core);
-    return;
+    return NULL;
   }
   if (open_caf(qp0, &prod)) {
     printf("\033[91mFAILED:\033[0m %s(), T%d prod\n", __func__, desired_core);
-    return;
+    return NULL;
   }
 #endif
 
@@ -513,6 +516,7 @@ void stage2mistake(int desired_core) {
 
   num_mistake = cnt_sum;
 
+  return NULL;
 }
 
 int main(int argc, char *argv[]) {
@@ -582,12 +586,18 @@ int main(int argc, char *argv[]) {
 #endif
 
   ready = 0;
-  std::vector<thread> slave_threads;
+  pthread_t slave_threads[3+NUM_STAGE1];
   for (int i = 0; NUM_STAGE1 > i; ++i) {
-    slave_threads.push_back(thread(stage1, core_id++));
+    threadCreate(&slave_threads[core_id], NULL, stage1, (void*)core_id,
+            core_id);
+    core_id++;
   }
-  slave_threads.push_back(thread(stage2correct, core_id++));
-  slave_threads.push_back(thread(stage2mistake, core_id++));
+  threadCreate(&slave_threads[core_id], NULL, stage2correct, (void*)core_id,
+          core_id);
+  core_id++;
+  threadCreate(&slave_threads[core_id], NULL, stage2mistake, (void*)core_id,
+          core_id);
+  core_id++;
 
   void *mempool = malloc(POOL_SIZE << 11); // POOL_SIZE 2KB memory blocks
   void *headerpool = malloc(POOL_SIZE * HEADER_SIZE);
@@ -732,8 +742,8 @@ int main(int argc, char *argv[]) {
   std::cout << (end_tsc - beg_tsc) << " ticks elapsed\n";
   std::cout << elapsed.count() << " ns elapsed\n";
 
-  for (int i = 0; (2 + NUM_STAGE1) > i; ++i) {
-    slave_threads[i].join();
+  for (int i = 1; (3 + NUM_STAGE1) > i; ++i) {
+    pthread_join(slave_threads[i], NULL);
   }
 
   std::cout << num_correct << " correct packet(s) and " <<

@@ -599,7 +599,7 @@ void incast(const bool isMaster,
 
 void *worker(void *arg) {
   int *pid = (int*) arg;
-  pinAtCoreFromList(*pid);
+  //pinAtCoreFromList(*pid);
 
   bool isMaster = (0 == *pid);
 #ifdef EMBER_INCAST
@@ -902,7 +902,7 @@ int main(int argc, char* argv[]) {
   int ids[nthreads];
   for (i = 1; nthreads > i; ++i) {
     ids[i] = i;
-    pthread_create(&threads[i], NULL, worker, (void *)&ids[i]);
+    threadCreate(&threads[i], NULL, worker, (void *)&ids[i], i);
   }
 
   const uint64_t beg_tsc = rdtsc();

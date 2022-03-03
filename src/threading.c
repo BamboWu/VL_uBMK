@@ -14,8 +14,10 @@
 #define BUFFER_LENGTH 1000
 
 #define CORE_LIST_LEN 128
+#define NUM_CPU_SETS 128
 
 static int core_list[CORE_LIST_LEN];
+static cpu_set_t cpu_sets[NUM_CPU_SETS] = {0};
 static int core_list_max = 0;
 
 /*
@@ -68,13 +70,41 @@ int parseCoreList(const char *core_list_str) {
     return list_idx;
 }
 
-/* Forward declaration */
-void setAffinity(const int desired_core);
+/*
+ * Bind a thread to the specified core.
+*/
+void setAffinityWithCPUSet(cpu_set_t* cpuset) {
+  int cpu_allocate_size = -1;
+#if (__GLIBC_MINOR__ > 9) && (__GLIBC__ == 2)
+  const int processors_to_allocate = 1;
+  cpu_allocate_size = CPU_ALLOC_SIZE(processors_to_allocate);
+#else
+  cpu_allocate_size = sizeof(cpu_set_t);
+#endif
+  errno = 0;
+  if(0 != sched_setaffinity(0 /* calling thread */,
+                            cpu_allocate_size, cpuset)) {
+    char buffer[BUFFER_LENGTH];
+    memset(buffer, '\0', BUFFER_LENGTH);
+    const char *str = strerror_r(errno, buffer, BUFFER_LENGTH);
+    fprintf(stderr, "Set affinity failed with error message( %s )\n", str);
+    exit(EXIT_FAILURE);
+  }
+  /** wait till we know we're on the right processor **/
+  if(0 != sched_yield()) {
+    perror("Failed to yield to wait for core change!\n");
+  }
+}
+
 /*
  * Pin a thread to the core specified in the core list at a certain index
  */
 void pinAtCoreFromList(const int idx) {
-    setAffinity(core_list[idx % core_list_max]);
+  if (idx >= NUM_CPU_SETS) {
+    perror("Exceeds the NUM_CPU_SETS limitation\n");
+  }
+  CPU_SET(core_list[idx % core_list_max], &cpu_sets[idx]);
+  setAffinityWithCPUSet(&cpu_sets[idx]);
 }
 
 /*
@@ -94,19 +124,7 @@ void setAffinity(const int desired_core) {
   CPU_ZERO(cpuset);
 #endif
   CPU_SET(desired_core, cpuset);
-  errno = 0;
-  if(0 != sched_setaffinity(0 /* calling thread */,
-                            cpu_allocate_size, cpuset)) {
-    char buffer[BUFFER_LENGTH];
-    memset(buffer, '\0', BUFFER_LENGTH);
-    const char *str = strerror_r(errno, buffer, BUFFER_LENGTH);
-    fprintf(stderr, "Set affinity failed with error message( %s )\n", str);
-    exit(EXIT_FAILURE);
-  }
-  /** wait till we know we're on the right processor **/
-  if(0 != sched_yield()) {
-    perror("Failed to yield to wait for core change!\n");
-  }
+  setAffinityWithCPUSet(cpuset);
 }
 
 /*

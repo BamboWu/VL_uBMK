@@ -25,12 +25,27 @@ using std::chrono::nanoseconds;
 #include "vl/vl.h"
 #elif CAF
 #include "caf.h"
+#elif ZMQ
+#include <zmq.h>
+#elif BLFQ
+#include <boost/lockfree/queue.hpp>
 #endif
 
+#ifdef BLFQ
+boost::lockfree::queue< Packet* > q01(1);
+boost::lockfree::queue< Packet* > q12(1);
+boost::lockfree::queue< Packet* > q23(1);
+boost::lockfree::queue< Packet* > q30(1);
+#elif ZMQ
+void *ctx;
+int zmq_hwm;
+#else
 int q01 = 1; // id for the queue connecting stage 0 and stage 1, 1:N
 int q12 = 2; // id for the queue connecting stage 1 and stage 2, N:M
 int q23 = 3; // id for the queue connecting stage 2 and stage 3, M:1
 int q30 = 4; // id for the queue connecting stage 3 and mempool, 1:1
+#endif
+
 uint64_t num_packets = 16;
 
 std::atomic<int> ready;
@@ -70,6 +85,16 @@ void* stage0(void* args) {
     printf("\033[91mFAILED:\033[0m %s(), T%d prod\n", __func__, desired_core);
     return NULL;
   }
+#elif ZMQ
+  void *prod = zmq_socket(ctx, ZMQ_PUSH);
+  assert(prod);
+  assert(0 == zmq_setsockopt(prod, ZMQ_SNDHWM, &zmq_hwm, sizeof(zmq_hwm)));
+  assert(0 == zmq_bind(prod, "inproc://q01"));
+  void *cons = zmq_socket(ctx, ZMQ_PULL);
+  assert(cons);
+  assert(0 == zmq_setsockopt(cons, ZMQ_RCVHWM, &zmq_hwm, sizeof(zmq_hwm)));
+  assert(0 == zmq_connect(cons, "inproc://q30"));
+  int64_t sz_cnt;
 #endif
 
   ready++;
@@ -102,6 +127,19 @@ void* stage0(void* args) {
     cnt /= sizeof(Packet*);
 #elif CAF
     cnt = caf_pop_bulk(&cons, (uint64_t*)pkts, BULK_SIZE);
+#elif ZMQ
+    sz_cnt = zmq_recv(cons, pkts, sizeof(Packet*) * BULK_SIZE, ZMQ_DONTWAIT);
+    if (0 > sz_cnt) {
+      sz_cnt = 0;
+    }
+    cnt = sz_cnt / sizeof(Packet*);
+#elif BLFQ
+    cnt = 0;
+    for (int npops = BULK_SIZE; 0 < npops; --npops) {
+      if (q30.pop(pkts[cnt])) {
+        cnt++;
+      }
+    }
 #endif
 
     if (cnt) { // pkts now have valid pointers
@@ -124,6 +162,13 @@ void* stage0(void* args) {
       uint64_t j = 0; // successfully pushed count
       do {
         j += caf_push_bulk(&prod, (uint64_t*)&pkts[j], cnt - j);
+      } while (j < cnt);
+#elif ZMQ
+      assert(sz_cnt == zmq_send(prod, pkts, sz_cnt, 0));
+#elif BLFQ
+      uint64_t j = 0;
+      do {
+        j += q01.bounded_push(pkts[j]);
       } while (j < cnt);
 #endif
       i += cnt;
@@ -175,6 +220,46 @@ void* stage1(void* args) {
     printf("\033[91mFAILED:\033[0m %s(), T%d prod\n", __func__, desired_core);
     return NULL;
   }
+#elif ZMQ
+  void *prod = zmq_socket(ctx, ZMQ_PUSH);
+  assert(prod);
+  assert(0 == zmq_setsockopt(prod, ZMQ_SNDHWM, &zmq_hwm, sizeof(zmq_hwm)));
+  void *cons = zmq_socket(ctx, ZMQ_PULL);
+  assert(cons);
+  assert(0 == zmq_setsockopt(cons, ZMQ_RCVHWM, &zmq_hwm, sizeof(zmq_hwm)));
+  int64_t sz_cnt;
+#endif
+
+#ifdef ZMQ
+  if (2 == desired_core) { // the leader of the stage 1 workers
+    assert(0 == zmq_bind(prod, "inproc://q12"));
+    while (1 != ready.load()) { // need to let stage0 create q01 socket first
+      __asm__ volatile("\
+          nop \n\
+          nop \n\
+          nop \n\
+          "
+          :
+          :
+          :
+          );
+    }
+  } else {
+    while (2 > ready.load()) {
+      __asm__ volatile("\
+          nop \n\
+          nop \n\
+          nop \n\
+          "
+          :
+          :
+          :
+          );
+    }
+    // TODO: ZMQ_PUSH/PULL handles either 1:M or M:1, does not work here
+    assert(0 == zmq_connect(prod, "inproc://q12"));
+  }
+  assert(0 == zmq_connect(cons, "inproc://q01"));
 #endif
 
   ready++;
@@ -207,6 +292,19 @@ void* stage1(void* args) {
     cnt /= sizeof(Packet*);
 #elif CAF
     cnt = caf_pop_bulk(&cons, (uint64_t*)pkts, BULK_SIZE);
+#elif ZMQ
+    sz_cnt = zmq_recv(cons, pkts, sizeof(Packet*) * BULK_SIZE, ZMQ_DONTWAIT);
+    if (0 > sz_cnt) {
+      sz_cnt = 0;
+    }
+    cnt = sz_cnt / sizeof(Packet*);
+#elif BLFQ
+    cnt = 0;
+    for (int npops = BULK_SIZE; 0 < npops; --npops) {
+      if (q01.pop(pkts[cnt])) {
+        cnt++;
+      }
+    }
 #endif
 
     if (cnt) { // pkts has valid pointers
@@ -234,6 +332,13 @@ void* stage1(void* args) {
       do {
         i += caf_push_bulk(&prod, (uint64_t*)&pkts[i], cnt - i);
       } while (i < cnt);
+#elif ZMQ
+      assert(sz_cnt == zmq_send(prod, pkts, sz_cnt, 0));
+#elif BLFQ
+      uint64_t j = 0;
+      do {
+        j += q12.bounded_push(pkts[j]);
+      } while (j < cnt);
 #endif
       continue;
     }
@@ -281,6 +386,33 @@ void* stage2(void* args) {
     printf("\033[91mFAILED:\033[0m %s(), T%d prod\n", __func__, desired_core);
     return NULL;
   }
+#elif ZMQ
+  void *prod = zmq_socket(ctx, ZMQ_PUSH);
+  assert(prod);
+  assert(0 == zmq_setsockopt(prod, ZMQ_SNDHWM, &zmq_hwm, sizeof(zmq_hwm)));
+  assert(0 == zmq_connect(prod, "inproc://q23"));
+  void *cons = zmq_socket(ctx, ZMQ_PULL);
+  assert(cons);
+  assert(0 == zmq_setsockopt(cons, ZMQ_RCVHWM, &zmq_hwm, sizeof(zmq_hwm)));
+  int64_t sz_cnt;
+#endif
+
+#ifdef ZMQ
+  while (2 > ready.load()) {
+    // need to let stage1 leader create q12 socket first
+    __asm__ volatile("\
+        nop \n\
+        nop \n\
+        nop \n\
+        nop \n\
+        nop \n\
+        "
+        :
+        :
+        :
+        );
+  }
+  assert(0 == zmq_connect(cons, "inproc://q12"));
 #endif
 
   ready++;
@@ -313,6 +445,19 @@ void* stage2(void* args) {
     cnt /= sizeof(Packet*);
 #elif CAF
     cnt = caf_pop_bulk(&cons, (uint64_t*)pkts, BULK_SIZE);
+#elif ZMQ
+    sz_cnt = zmq_recv(cons, pkts, sizeof(Packet*) * BULK_SIZE, ZMQ_DONTWAIT);
+    if (0 > sz_cnt) {
+      sz_cnt = 0;
+    }
+    cnt = sz_cnt / sizeof(Packet*);
+#elif BLFQ
+    cnt = 0;
+    for (int npops = BULK_SIZE; 0 < npops; --npops) {
+      if (q12.pop(pkts[cnt])) {
+        cnt++;
+      }
+    }
 #endif
 
     if (cnt) { // pkts has valid pointers
@@ -341,6 +486,13 @@ void* stage2(void* args) {
       do {
         i += caf_push_bulk(&prod, (uint64_t*)&pkts[i], cnt - i);
       } while (i < cnt);
+#elif ZMQ
+      assert(sz_cnt == zmq_send(prod, pkts, sz_cnt, 0));
+#elif BLFQ
+      uint64_t j = 0;
+      do {
+        j += q23.bounded_push(pkts[j]);
+      } while (j < cnt);
 #endif
       continue;
     }
@@ -367,6 +519,23 @@ int main(int argc, char *argv[]) {
   } else {
     parseCoreList(core_list);
   }
+#if ZMQ
+  ctx = zmq_ctx_new();
+  assert(ctx);
+  zmq_hwm = POOL_SIZE;
+  if (3 < argc) {
+    zmq_hwm = atoi(argv[3]);
+  }
+#elif BLFQ
+  size_t blfq_size = POOL_SIZE;
+  if (3 < argc) {
+    blfq_size = atoi(argv[3]);
+  }
+  q01.reserve(blfq_size);
+  q12.reserve(blfq_size);
+  q23.reserve(blfq_size);
+  q30.reserve(blfq_size);
+#endif
   pinAtCoreFromList(0);
   printf("%s 1-%d-%d-1 %d bulk %lu pkts %d pool\n",
          argv[0], NUM_STAGE1, NUM_STAGE2, BULK_SIZE, num_packets, POOL_SIZE);
@@ -413,6 +582,15 @@ int main(int argc, char *argv[]) {
     printf("\033[91mFAILED:\033[0m %s(), prod\n", __func__);
     return -1;
   }
+#elif ZMQ
+  void *prod = zmq_socket(ctx, ZMQ_PUSH);
+  assert(prod);
+  assert(0 == zmq_setsockopt(prod, ZMQ_SNDHWM, &zmq_hwm, sizeof(zmq_hwm)));
+  assert(0 == zmq_bind(prod, "inproc://q30"));
+  void *cons = zmq_socket(ctx, ZMQ_PULL);
+  assert(cons);
+  assert(0 == zmq_setsockopt(cons, ZMQ_RCVHWM, &zmq_hwm, sizeof(zmq_hwm)));
+  assert(0 == zmq_bind(cons, "inproc://q23"));
 #endif
 
   ready = 0;
@@ -475,6 +653,14 @@ int main(int argc, char *argv[]) {
     line_vl_push_strong(&prod, (uint8_t*)pkts, sizeof(Packet*) * j);
 #elif CAF
     assert(j == caf_push_bulk(&prod, (uint64_t*)pkts, j));
+#elif ZMQ
+    assert((int64_t)(sizeof(Packet*) * j) ==
+            zmq_send(prod, pkts, sizeof(Packet*) * j, 0));
+#elif BLFQ
+    size_t k = 0;
+    while (j > k) {
+      k += q30.bounded_push(pkts[k]);
+    }
 #endif
     i += j;
   }
@@ -488,6 +674,19 @@ int main(int argc, char *argv[]) {
     line_vl_pop_non(&cons, (uint8_t*)pkts, &cnt);
 #elif CAF
     cnt = caf_pop_bulk(&cons, (uint64_t*)pkts, BULK_SIZE);
+#elif ZMQ
+    cnt = zmq_recv(cons, pkts, sizeof(Packet*) * BULK_SIZE, ZMQ_DONTWAIT);
+    if ((sizeof(Packet*) * BULK_SIZE) < cnt) {
+      cnt = 0;
+    }
+#elif BLFQ
+    cnt = 0;
+    for (int npops = BULK_SIZE; 0 < npops; --npops) {
+      if (q23.pop(pkts[cnt])) {
+        cnt++;
+      }
+    }
+    cnt *= sizeof(Packet*);
 #endif
 
     if (cnt) { // valid packets pointers in pkts
@@ -498,8 +697,16 @@ int main(int argc, char *argv[]) {
 #elif CAF
         uint64_t j = 0; // successfully pushed count
         do {
-          j += caf_push_bulk(&prod, (uint64_t*)&pkts[j], ncnt2send - j);
-        } while (j < ncnt2send);
+          j += caf_push_bulk(&prod, (uint64_t*)&pkts[j], cnt2send - j);
+        } while (j < cnt2send);
+#elif ZMQ
+        assert((int64_t)cnt2send == zmq_send(prod, pkts, cnt2send, 0));
+#elif BLFQ
+        uint64_t j = 0;
+        uint64_t push2do = cnt2send / sizeof(Packet*);
+        do {
+          j += q30.bounded_push(pkts[j]);
+        } while (j < push2do);
 #endif
         ncnt2send -= cnt2send;
       }

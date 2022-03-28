@@ -106,9 +106,8 @@ endmacro(add_boostable_microbmk)
 
 macro(add_raftbenchmark NAME)
   add_executable(${NAME} ${ARGN})
-  target_compile_options(${NAME} PRIVATE -faligned-new)
-  target_compile_definitions(${NAME} PRIVATE
-      -DL1D_CACHE_LINE_SIZE=64 -DUSEQTHREADS=1)
+  target_compile_options(${NAME} PRIVATE -faligned-new ${RaftLib_CFLAGS})
+  target_compile_definitions(${NAME} PRIVATE -DUSEQTHREADS=1)
   target_include_directories(${NAME} PRIVATE
       ${QTHREAD_INCLUDE_DIRS} ${RaftLib_INCLUDE_DIRS})
   target_link_libraries(${NAME} uBMK_util

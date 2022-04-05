@@ -366,6 +366,16 @@ int main( int argc, char **argv )
     unsigned int samples = 100;
     char core_list[] = "1-3";
 
+#ifndef NOSCHEDRR
+    int priority = sched_get_priority_max(SCHED_RR);
+    struct sched_param sp = { .sched_priority = priority };
+    if (0 != sched_setscheduler(0x0 /* this */,
+                                SCHED_RR,
+                                &sp)) {
+      perror("failed to set schedule");
+    }
+#endif
+
     if( 3 < argc )
     {
         parseCoreList(argv[3]);
@@ -480,12 +490,15 @@ int main( int argc, char **argv )
             :
             );
     }
+
+    const uint64_t beg_tsc = rdtsc();
+    const auto beg( high_resolution_clock::now() );
+
 #ifndef NOGEM5
     m5_reset_stats(0, 0);
 #endif
 
     ready--;
-    std::cout << "GO\n";
 
     pthread_join(t_input, NULL);
     for (unsigned int i=0; i < stages; i++)
@@ -497,7 +510,16 @@ int main( int argc, char **argv )
 #ifndef NOGEM5
     m5_dump_reset_stats(0, 0);
 #endif
-    std::cout << "Good Job Guys !!!\n";
+
+    const uint64_t end_tsc = rdtsc();
+    const auto end( high_resolution_clock::now() );
+    const auto elapsed( duration_cast< nanoseconds >( end - beg ) );
+
+    std::cout << ( end_tsc - beg_tsc ) << " ticks elapsed\n";
+    std::cout << elapsed.count() << " ns elapsed\n";
+    std::cout << elapsed.count() / samples << " ns average per samples (" <<
+      (2 + stages) << " stages including input, output)\n";
+
 #ifdef VL
     delete[] fds;
     delete[] p_qs;

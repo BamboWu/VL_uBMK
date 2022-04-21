@@ -219,26 +219,24 @@ m5_q_t mosi_m5,
        miso_m5;
 #endif
 
+#ifdef VL
+using q_t = vl_q_t;
+#elif M5VL
+using q_t = m5_q_t;
+#elif CAF
+using q_t = caf_q_t;
+#elif ZMQ
+using q_t = zmq_q_t;
+#else
+using q_t = boost_q_t;
+#endif
+
 struct alignas( 64 ) /** align to 64B boundary **/ playerArgs
 {
     std::uint64_t       burst;
     std::uint64_t       round;
-#ifdef VL
-    vl_q_t              *qmosi  = nullptr;
-    vl_q_t              *qmiso  = nullptr;
-#elif M5VL
-    m5_q_t              *qmosi  = nullptr;
-    m5_q_t              *qmiso  = nullptr;
-#elif CAF
-    caf_q_t             *qmosi  = nullptr;
-    caf_q_t             *qmiso  = nullptr;
-#elif ZMQ
-    zmq_q_t             *qmosi  = nullptr;
-    zmq_q_t             *qmiso  = nullptr;
-#else
-    boost_q_t           *qmosi  = nullptr;
-    boost_q_t           *qmiso  = nullptr;
-#endif
+    q_t                 *qmosi  = nullptr;
+    q_t                 *qmiso  = nullptr;
 };
 
 void*
@@ -259,7 +257,27 @@ ping( void* args )
     /** we're ready to start **/
     ready++;
 
-    while( ready != 2 ){ /** spin **/ };
+    while( 2 != ready.load() ){ /** spin **/
+      __asm__ volatile("\
+          nop \n\
+          nop \n\
+          nop \n\
+          nop \n\
+          nop \n\
+          nop \n\
+          nop \n\
+          nop \n\
+          nop \n\
+          nop \n\
+          nop \n\
+          nop \n\
+          nop \n\
+          "
+          :
+          :
+          :
+          );
+    };
 
 
     /** we're ready to get started, both initialized **/
@@ -336,8 +354,6 @@ int main( int argc, char **argv )
     miso_zmq.open("miso");
 #endif
 
-    atomic_t    ready( -1 );
-
     playerArgs args[2];
 
     args[0].burst   = burst;
@@ -393,7 +409,21 @@ int main( int argc, char **argv )
 
         ball_t ball;
 
-        while (1 != ready.load()) { /* spin */ }
+        while (1 != ready.load()) { /* spin */
+            __asm__ volatile("\
+                nop \n\
+                nop \n\
+                nop \n\
+                nop \n\
+                nop \n\
+                nop \n\
+                nop \n\
+                "
+                :
+                :
+                :
+                );
+        }
 
         const uint64_t beg_tsc = rdtsc();
         const auto beg( high_resolution_clock::now() );

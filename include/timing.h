@@ -6,6 +6,7 @@
 extern "C" {
 #endif
 
+#ifndef rdtsc
 /*
  * Read Time Stamp Counter (TSC)
  */
@@ -51,6 +52,7 @@ uint64_t rdtsc() {
   return time_taken; /** nanoseconds **/
 #endif
 }
+#endif /* ifndef rdtsc */
 
 #ifdef __cplusplus
 }

@@ -36,11 +36,12 @@ find_package(ZMQ QUIET)
 find_package(PAPI QUIET)
 find_package(Numa QUIET)
 find_package(QThread QUIET)
+find_package(UT QUIET)
 find_package(RaftLib QUIET)
 
 set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_EXTENSIONS OFF)
+#set(CMAKE_CXX_EXTENSIONS OFF)
 
 execute_process(COMMAND grep -l 'rdtscp' /proc/cpuinfo
     OUTPUT_VARIABLE CPU_HAS_RDTSCP)
@@ -107,11 +108,8 @@ endmacro(add_boostable_microbmk)
 macro(add_raftbenchmark NAME)
   add_executable(${NAME} ${ARGN})
   target_compile_options(${NAME} PRIVATE -faligned-new ${RaftLib_CFLAGS})
-  target_compile_definitions(${NAME} PRIVATE -DUSEQTHREADS=1)
-  target_include_directories(${NAME} PRIVATE
-      ${QTHREAD_INCLUDE_DIRS} ${RaftLib_INCLUDE_DIRS})
-  target_link_libraries(${NAME} uBMK_util
-      ${RaftLib_LDFLAGS} ${QTHREAD_LIBRARIES})
+  target_include_directories(${NAME} PRIVATE ${RaftLib_INCLUDE_DIRS})
+  target_link_libraries(${NAME} uBMK_util ${RaftLib_LDFLAGS})
   add_dependencies(${NAME} uBMK_util)
   if(GEM5_ROOT)
     target_link_libraries(${NAME} m5)

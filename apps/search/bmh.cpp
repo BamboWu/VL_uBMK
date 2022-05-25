@@ -85,7 +85,7 @@ private:
 int
 main( int argc, char **argv )
 {
-    using chunk = raft::filechunk< 48 /** 48B data, 12B meta == 60B payload **/ >;
+    using chunk = raft::filechunk< 38 /** 38B data, 24B meta == 62B payload **/ >;
     std::cerr << "chunk size: " << sizeof( chunk ) << "\n";
     using fr    = raft::filereader< chunk, false >;
     using search = search< chunk >;
@@ -93,6 +93,7 @@ main( int argc, char **argv )
     
     const std::string term( argv[ 2 ] );
     int kernel_count = 1;
+    int repetitions = 1;
     raft::map m;
     if( argc < 3 )
     {
@@ -101,9 +102,14 @@ main( int argc, char **argv )
     } else if ( 4 <= argc )
     {
         kernel_count = atoi( argv[ 3 ] );
+        if ( 5 <= argc )
+        {
+            repetitions = atoi( argv[ 4 ] );
+        }
     }
 
-    fr   read( argv[ 1 ], (fr::offset_type) term.length(), kernel_count );
+    fr   read( argv[ 1 ], (fr::offset_type) term.length(), kernel_count,
+            repetitions );
 
     print p( kernel_count );
     for( auto i( 0 ); i < kernel_count; i++ )
@@ -115,13 +121,22 @@ main( int argc, char **argv )
     const uint64_t beg_tsc = rdtsc();
     const auto beg( high_resolution_clock::now() );
 
-#ifdef VL
-    m.exe< partition_dummy, pool_schedule, vlalloc, no_parallel >();
-#elif STDALLOC
-    m.exe< partition_dummy, pool_schedule, stdalloc, no_parallel >();
+    m.exe< partition_dummy,
+#if USEUT
+        ut_schedule,
+#elif USEQTHREAD
+        pool_schedule,
 #else
-    m.exe< partition_dummy, pool_schedule, dynalloc, no_parallel >();
+        simple_schedule,
 #endif
+#ifdef VL
+        vlalloc,
+#elif STDALLOC
+        stdalloc,
+#else
+        dynalloc,
+#endif
+        no_parallel >();
 
     const uint64_t end_tsc = rdtsc();
     const auto end( high_resolution_clock::now() );

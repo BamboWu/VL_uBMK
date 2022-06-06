@@ -34,6 +34,13 @@
 #include <cassert>
 //#include <float.h>
 #include <cfloat>
+#include <chrono>
+
+using std::chrono::high_resolution_clock;
+using std::chrono::duration_cast;
+using std::chrono::nanoseconds;
+
+#include "timing.h"
 
 #include "fluid.hpp"
 #include "cellpool.hpp"
@@ -1931,14 +1938,33 @@ void AdvanceFrameMT(int threadnum)
   std::cout << std::endl;
 
   // Execute the kernel
-#ifdef VL
-  m.exe< partition_dummy, pool_schedule, vlalloc, no_parallel >();
-#elif STDALLOC
-  m.exe< partition_dummy, pool_schedule, stdalloc, no_parallel >();
+
+  const uint64_t beg_tsc = rdtsc();
+  const auto beg( high_resolution_clock::now() );
+
+  m.exe< partition_dummy,
+#if USEUT
+      ut_schedule,
+#elif USEQTHREAD
+      pool_schedule,
 #else
-  m.exe< partition_dummy, pool_schedule, dynalloc, no_parallel >();
+      simple_schedule,
 #endif
-  
+#ifdef VL
+      vlalloc,
+#elif STDALLOC
+      stdalloc,
+#else
+      dynalloc,
+#endif
+      no_parallel >();
+
+  const uint64_t end_tsc = rdtsc();
+  const auto end( high_resolution_clock::now() );
+  const auto elapsed( duration_cast< nanoseconds >( end - beg ) );
+  std::cout << ( end_tsc - beg_tsc ) << " ticks elapsed\n";
+  std::cout << elapsed.count() << " ns elapsed\n";
+
   for (auto i = 0; i < threadnum; i++)
   {
     delete clearParticlesMTWorkers[i];

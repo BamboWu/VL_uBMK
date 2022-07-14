@@ -4,3 +4,4 @@ src/pmuenable/*
 !src/pmuenable/Makefile
 !src/pmuenable/pmuenable.c
 !src/pmuenable/trypmu.c
+.*.sw?

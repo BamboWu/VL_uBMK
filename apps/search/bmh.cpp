@@ -115,7 +115,7 @@ main( int argc, char **argv )
     for( auto i( 0 ); i < kernel_count; i++ )
     {
         m += read[ std::to_string( i ) ] >> 
-                raft::kernel::make< search >( term ) >> p[ std::to_string( i ) ];
+                raft::kernel_wrapper::make< search >( term ) >> p[ std::to_string( i ) ];
     }
 
     const uint64_t beg_tsc = rdtsc();

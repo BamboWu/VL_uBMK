@@ -56,31 +56,32 @@ typedef graph_t::edge_iterator      edge_iterator;
 size_t get_intersect_cnt(vector<size_t>& setA, vector<size_t>& setB);
 struct reduction_msg
 {
-    int16_t* pcount; // pointer to vertex_property.count
+    size_t src; // src vertex
+    size_t dst; // dst vertex
     int16_t cnt; // count of triangles to add to *pcount
 };
 
 class reduce_kernel : public raft::parallel_k
 {
 public:
-    reduce_kernel(size_t* tot, int tc_num) : raft::parallel_k(), ptot(tot) {
+    reduce_kernel(int16_t* cnts, int tc_num) :
+        raft::parallel_k(), pcnts(cnts) {
         for (int i = 0; tc_num > i; ++i) {
             addPortTo<struct reduction_msg>(input);
         }
-        *ptot = 0;
     }
     virtual raft::kstatus run() {
         for (auto& port : input) {
             if (0 < port.size()) {
                 auto& msg(port.template peek<struct reduction_msg>());
-                *msg.pcount += msg.cnt;
-                *ptot += msg.cnt;
+                pcnts[msg.src] += msg.cnt;
+                pcnts[msg.dst] += msg.cnt;
                 port.recycle(1);
             }
         }
         return raft::proceed;
     }
-    size_t* ptot;
+    int16_t* pcnts;
 };
 
 class tc_kernel : public raft::kernel
@@ -109,9 +110,7 @@ public:
             vector<uint64_t> & dest_set = vit_targ->property().neighbor_set;
             int16_t cnt = get_intersect_cnt(src_set, dest_set);
             output["output"].template push<struct reduction_msg>(
-                    {&(vit->property().count), cnt});
-            output["output"].template push<struct reduction_msg>(
-                    {&(vit_targ->property().count), cnt});
+                    {vit->id(), vit_targ->id(), cnt});
         }
         input["input"].recycle();
         return raft::proceed;
@@ -327,10 +326,12 @@ size_t parallel_triangle_count(graph_t& g, unsigned threadnum, vector<unsigned>&
     // UNUSED(workset);
     // UNUSED(perf);
     // UNUSED(perf_group);
-    size_t ret;
+    size_t ret = 0;
+
+    int16_t* cnts = new int16_t[g.num_vertices()];
 
     workset_kernel workset_k(g, threadnum);
-    reduce_kernel reduce_k(&ret, threadnum);
+    reduce_kernel reduce_k(cnts, threadnum);
     tc_kernel tc_k(g);
 
     raft::map m;
@@ -345,11 +346,18 @@ size_t parallel_triangle_count(graph_t& g, unsigned threadnum, vector<unsigned>&
 
     m.exe();
 
+    for (size_t vid = 0; g.num_vertices() > vid; ++vid) {
+        cnts[vid] /= 2;
+        ret += cnts[vid];
+        vertex_iterator vit = g.find_vertex(vid);
+        vit->property().count = cnts[vid];
+    }
+
     for (unsigned i = 0; threadnum > i; ++i) {
         perf.stop(i, perf_group);
     }
 
-    ret /= 6;
+    ret /= 3;
 
     return ret;
 }

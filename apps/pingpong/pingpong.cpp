@@ -33,6 +33,10 @@
 #include <zmq.h>
 #endif
 
+#ifdef LRPC
+#include <base/lrpc.h>
+#endif
+
 #ifndef NOGEM5
 #include "gem5/m5ops.h"
 #endif
@@ -45,11 +49,11 @@
  * in main.
  */
 #ifndef STDATOMIC
-using atomic_t = boost::atomic< int >;
+using pp_atomic_t = boost::atomic< int >;
 #else
-using atomic_t = std::atomic< int >;
+using pp_atomic_t = std::atomic< int >;
 #endif
-atomic_t ready;
+pp_atomic_t ready;
 
 #ifndef STDCHRONO
 using boost::chrono::high_resolution_clock;
@@ -219,6 +223,44 @@ m5_q_t mosi_m5,
        miso_m5;
 #endif
 
+#ifdef LRPC
+struct lrpc_q_t {
+  struct lrpc_msg *buf;
+  uint32_t *wb;
+  struct lrpc_chan_in ch_in;
+  struct lrpc_chan_out ch_out;
+  bool push(ball_t ball) {
+    while (!lrpc_send(&ch_out, 0, ball.val)) {
+      printf("lrpc_send failed\n");
+    }
+    return true;
+  }
+  bool pop(ball_t &ball) {
+    uint64_t cmd;
+    return lrpc_recv(&ch_in, &cmd, &ball.val);
+  }
+  void open(int fd) {
+    buf = (struct lrpc_msg*) malloc(sizeof(struct lrpc_msg) * CAPACITY);
+    wb = (uint32_t*) malloc(64); // cacheline size
+    lrpc_init_in(&ch_in, buf, CAPACITY, wb);
+    lrpc_init_out(&ch_out, buf, CAPACITY, wb);
+  }
+  void close() {
+    if (NULL != buf) {
+      free(buf);
+      buf = NULL;
+    }
+    if (NULL != wb) {
+      free(wb);
+      wb = NULL;
+    }
+  }
+};
+
+lrpc_q_t mosi_lrpc,
+         miso_lrpc;
+#endif
+
 #ifdef VL
 using q_t = vl_q_t;
 #elif M5VL
@@ -227,6 +269,8 @@ using q_t = m5_q_t;
 using q_t = caf_q_t;
 #elif ZMQ
 using q_t = zmq_q_t;
+#elif LRPC
+using q_t = lrpc_q_t;
 #else
 using q_t = boost_q_t;
 #endif
@@ -354,6 +398,11 @@ int main( int argc, char **argv )
     miso_zmq.open("miso");
 #endif
 
+#ifdef LRPC
+    mosi_lrpc.open(1);
+    miso_lrpc.open(2);
+#endif
+
     playerArgs args[2];
 
     args[0].burst   = burst;
@@ -370,6 +419,9 @@ int main( int argc, char **argv )
 #elif ZMQ
     args[0].qmosi   = &mosi_zmq;
     args[0].qmiso   = &miso_zmq;
+#elif LRPC
+    args[0].qmosi   = &mosi_lrpc;
+    args[0].qmiso   = &miso_lrpc;
 #else
     args[0].qmosi   = &mosi_boost;
     args[0].qmiso   = &miso_boost;
@@ -388,6 +440,9 @@ int main( int argc, char **argv )
 #elif ZMQ
     args[1].qmosi   = &mosi_zmq;
     args[1].qmiso   = &miso_zmq;
+#elif LRPC
+    args[1].qmosi   = &mosi_lrpc;
+    args[1].qmiso   = &miso_lrpc;
 #else
     args[1].qmosi   = &mosi_boost;
     args[1].qmiso   = &miso_boost;

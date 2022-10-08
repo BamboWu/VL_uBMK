@@ -21,6 +21,8 @@ using std::chrono::nanoseconds;
 #include "vl/vl_inline.h"
 #elif VL
 #include "vl/vl.h"
+#elif CAF
+#include "caf.h"
 #elif ZMQ
 #include <zmq.h>
 #elif BLFQ
@@ -34,6 +36,9 @@ using std::chrono::nanoseconds;
 #ifdef VL
 int tosort_fd; // master enqueues swap/rswap tasks, slaves dequeue
 int topair_fd; // slaves enqueue finished tasks, master dequeues to pair
+#elif CAF
+#define TOSORT_QID 0
+#define TOPAIR_QID 1
 #elif ZMQ
 void *ctx;
 #elif BLFQ
@@ -100,6 +105,10 @@ void* slave(void* args) {
     printf("\033[91mFAILED:\033[0m %s(), topair_prod\n", __func__);
     return NULL;
   }
+#elif CAF
+  cafendpt_t tosort_cons, topair_prod;
+  open_caf(TOSORT_QID, &tosort_cons);
+  open_caf(TOPAIR_QID, &topair_prod);
 #elif ZMQ
   const size_t msg_size = sizeof(msg);
   // setup zmq sockets
@@ -149,6 +158,8 @@ void* slave(void* args) {
       cnt = MSG_SIZE;
       line_vl_pop_non(&tosort_cons, (uint8_t*)&msg, &cnt);
       if (MSG_SIZE == cnt) { // get a sorting task
+#elif CAF
+      if (MSG_SIZE == caf_pop_bulk(&tosort_cons, (uint64_t*)&msg, MSG_SIZE)) {
 #elif ZMQ
       if(0 < zmq_recv(tosort_cons, &msg, msg_size, ZMQ_DONTWAIT)) {
 #elif BLFQ
@@ -293,6 +304,9 @@ void* slave(void* args) {
       }
 #ifdef VL
       line_vl_push_weak(&topair_prod, (uint8_t*)&msg, MSG_SIZE);
+#elif CAF
+      assert(MSG_SIZE ==
+             caf_push_bulk(&topair_prod, (uint64_t*)&msg, MSG_SIZE));
 #elif ZMQ
       assert(msg_size == zmq_send(topair_prod, &msg, msg_size, 0));
 #elif BLFQ
@@ -355,6 +369,10 @@ void sort(int *arr, const uint64_t len, const int num_consumer_lines) {
            "return %d\n", errorcode);
     return;
   }
+#elif CAF
+  cafendpt_t tosort_prod, topair_cons;
+  open_caf(TOSORT_QID, &tosort_prod);
+  open_caf(TOPAIR_QID, &topair_cons);
 #elif ZMQ
   // setup zmq sockets
   size_t cnt;
@@ -444,6 +462,8 @@ void sort(int *arr, const uint64_t len, const int num_consumer_lines) {
     //msg.arr.end = feed_in;
 #ifdef VL
     line_vl_push_weak(&tosort_prod, (uint8_t*)&msg, MSG_SIZE);
+#elif CAF
+    assert(MSG_SIZE == caf_push_bulk(&tosort_prod, (uint64_t*)&msg, MSG_SIZE));
 #elif ZMQ
     assert(msg_size == zmq_send(tosort_prod, &msg, msg_size, 0));
 #elif BLFQ
@@ -461,6 +481,8 @@ void sort(int *arr, const uint64_t len, const int num_consumer_lines) {
     cnt = MSG_SIZE;
     line_vl_pop_non(&topair_cons, (uint8_t*)&msg, &cnt);
     if (MSG_SIZE == cnt) {
+#elif CAF
+    if (MSG_SIZE == caf_pop_bulk(&topair_cons, (uint64_t*)&msg, MSG_SIZE)) {
 #elif ZMQ
     cnt = zmq_recv(topair_cons, &msg, msg_size, ZMQ_DONTWAIT);
     if (msg_size == cnt) {
@@ -532,6 +554,9 @@ void sort(int *arr, const uint64_t len, const int num_consumer_lines) {
             msg.arr.end = task_beg;
 #ifdef VL
             line_vl_push_weak(&tosort_prod, (uint8_t*)&msg, MSG_SIZE);
+#elif CAF
+            assert(MSG_SIZE ==
+                   caf_push_bulk(&tosort_prod, (uint64_t*)&msg, MSG_SIZE));
 #elif ZMQ
             assert(msg_size == zmq_send(tosort_prod, &msg, msg_size, 0));
 #elif BLFQ
@@ -558,6 +583,9 @@ void sort(int *arr, const uint64_t len, const int num_consumer_lines) {
             msg.arr.end = task_beg;
 #ifdef VL
             line_vl_push_weak(&tosort_prod, (uint8_t*)&msg, MSG_SIZE);
+#elif CAF
+            assert(MSG_SIZE ==
+                   caf_push_bulk(&tosort_prod, (uint64_t*)&msg, MSG_SIZE));
 #elif ZMQ
             assert(msg_size == zmq_send(tosort_prod, &msg, msg_size, 0));
 #elif BLFQ
@@ -614,6 +642,9 @@ void sort(int *arr, const uint64_t len, const int num_consumer_lines) {
               msg.arr.end = task_beg;
 #ifdef VL
               line_vl_push_weak(&tosort_prod, (uint8_t*)&msg, MSG_SIZE);
+#elif CAF
+              assert(MSG_SIZE ==
+                     caf_push_bulk(&tosort_prod, (uint64_t*)&msg, MSG_SIZE));
 #elif ZMQ
               assert(msg_size == zmq_send(tosort_prod, &msg, msg_size, 0));
 #elif BLFQ
@@ -664,6 +695,9 @@ void sort(int *arr, const uint64_t len, const int num_consumer_lines) {
           msg.arr.end = task_beg + mini_task_len;
 #ifdef VL
           line_vl_push_weak(&tosort_prod, (uint8_t*)&msg, MSG_SIZE);
+#elif CAF
+          assert(MSG_SIZE ==
+                 caf_push_bulk(&tosort_prod, (uint64_t*)&msg, MSG_SIZE));
 #elif ZMQ
           assert(msg_size == zmq_send(tosort_prod, &msg, msg_size, 0));
 #elif BLFQ
@@ -686,6 +720,8 @@ void sort(int *arr, const uint64_t len, const int num_consumer_lines) {
       //msg.arr.end = feed_in + mini_task_len;
 #ifdef VL
       if (line_vl_push_non(&tosort_prod, (uint8_t*)&msg, MSG_SIZE)) {
+#elif CAF
+      if (MSG_SIZE == caf_push_bulk(&tosort_prod, (uint64_t*)&msg, MSG_SIZE)) {
 #elif ZMQ
       if (msg_size == zmq_send(tosort_prod, &msg, msg_size, 0)) {
 #elif BLFQ

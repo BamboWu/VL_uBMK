@@ -10,6 +10,9 @@ endif()
 if(VL_FOUND)
   include_directories(${VL_INCLUDE_DIR})
 endif()
+if(CAF_FOUND)
+  include_directories(${CAF_INCLUDE_DIR})
+endif()
 
 add_microbenchmark(bitonic_seq seq.cpp)
 
@@ -146,4 +149,36 @@ else()
                    bitonic_il_3S_Exp10F32
                    bitonic_il_7S_Exp10F32
                    bitonic_il_15S_Exp10F32)
+endif()
+if(NOT CAF_FOUND)
+  MESSAGE(STATUS "WARNING: No libcaf found, skip bitonic_caf.")
+elseif(NOT GCCLIBATOMIC_FOUND)
+  MESSAGE(STATUS "WARNING: No atomic library, skip bitonic_caf.")
+else()
+  add_boostable_microbmk(bitonic_qmd_1S_Exp10F32 bitonic.cpp utils.cpp)
+  add_boostable_microbmk(bitonic_qmd_3S_Exp10F32 bitonic.cpp utils.cpp)
+  add_boostable_microbmk(bitonic_qmd_7S_Exp10F32 bitonic.cpp utils.cpp)
+  add_boostable_microbmk(bitonic_qmd_15S_Exp10F32 bitonic.cpp utils.cpp)
+  target_link_libraries(bitonic_qmd_1S_Exp10F32 ${CAF_LIBRARY})
+  target_link_libraries(bitonic_qmd_3S_Exp10F32 ${CAF_LIBRARY})
+  target_link_libraries(bitonic_qmd_7S_Exp10F32 ${CAF_LIBRARY})
+  target_link_libraries(bitonic_qmd_15S_Exp10F32 ${CAF_LIBRARY})
+  target_compile_definitions(bitonic_qmd_1S_Exp10F32 PRIVATE -DCAF=1
+                             -DMINI_TASK_EXP=10 -DMAX_ON_THE_FLY=32
+                             -DNUM_SLAVES=1)
+  target_compile_definitions(bitonic_qmd_3S_Exp10F32 PRIVATE -DCAF=1
+                             -DMINI_TASK_EXP=10 -DMAX_ON_THE_FLY=32
+                             -DNUM_SLAVES=3)
+  target_compile_definitions(bitonic_qmd_7S_Exp10F32 PRIVATE -DCAF=1
+                             -DMINI_TASK_EXP=10 -DMAX_ON_THE_FLY=32
+                             -DNUM_SLAVES=7)
+  target_compile_definitions(bitonic_qmd_15S_Exp10F32 PRIVATE -DCAF=1
+                             -DMINI_TASK_EXP=10 -DMAX_ON_THE_FLY=32
+                             -DNUM_SLAVES=15)
+  add_custom_target(bitonic_qmd)
+  add_dependencies(bitonic_qmd
+                   bitonic_qmd_1S_Exp10F32
+                   bitonic_qmd_3S_Exp10F32
+                   bitonic_qmd_7S_Exp10F32
+                   bitonic_qmd_15S_Exp10F32)
 endif()

@@ -507,7 +507,7 @@ int main(int argc, char *argv[]) {
 
   char core_list[] = "0-3";
 
-  int core_id = 1;
+  uint64_t core_id = 1;
   size_t cnt = 0;
   Packet *pkts[BULK_SIZE] = { NULL };
 

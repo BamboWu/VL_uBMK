@@ -21,6 +21,11 @@ using std::chrono::nanoseconds;
 #include "vl/vl.h"
 #endif
 
+#ifdef CAF
+#include <assert.h>
+#include "caf.h"
+#endif
+
 #ifdef ZMQ
 #include <assert.h>
 #include <zmq.h>
@@ -120,6 +125,11 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
            vlendpt_t *xUpSend, vlendpt_t *xDnSend, vlendpt_t *yUpSend,
            vlendpt_t *yDnSend, vlendpt_t *xUpRecv, vlendpt_t *xDnRecv,
            vlendpt_t *yUpRecv, vlendpt_t *yDnRecv
+#elif CAF
+           double *msg,
+           cafendpt_t *xUpSend, cafendpt_t *xDnSend, cafendpt_t *yUpSend,
+           cafendpt_t *yDnSend, cafendpt_t *xUpRecv, cafendpt_t *xDnRecv,
+           cafendpt_t *yUpRecv, cafendpt_t *yDnRecv
 #endif
            ) {
 
@@ -133,11 +143,13 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
   uint16_t *blkId = (uint16_t*)buf; /* used to reorder cache blocks */
   uint16_t idx;
   size_t cnt, rcnt;
+#elif CAF
+  char *buf = new char[msgSz];
 #endif
   for (i = 0; repeats > i; ++i) {
 
 #if VL
-    for (idx = 0; nblks > idx; ++idx) { /* } */
+    for (idx = 0; nblks > idx; ++idx) {
       /* vl has to break a message to fit into cacheline
        * and this loop cannot be inside, otherwise all producers goes first,
        * and it would overwhelm routing device producer buffer */
@@ -156,6 +168,8 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
       }
 #elif VL
       line_vl_pop_weak(xDnRecv, (uint8_t*)buf, &rcnt);
+#elif CAF
+      assert((size_t)msgSz == caf_pop_bulk(xDnRecv, (uint64_t*)buf, msgSz));
 #endif
     }
     if (-1 < yDn) {
@@ -168,6 +182,8 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
       }
 #elif VL
       line_vl_pop_weak(yDnRecv, (uint8_t*)buf, &rcnt);
+#elif CAF
+      assert((size_t)msgSz == caf_pop_bulk(yDnRecv, (uint64_t*)buf, msgSz));
 #endif
     }
 
@@ -189,6 +205,8 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
       }
 #elif VL
       line_vl_push_strong(xUpSend, (uint8_t*)buf, cnt + sizeof(uint16_t));
+#elif CAF
+      assert((size_t)msgSz == caf_push_bulk(xUpSend, (uint64_t*)buf, msgSz));
 #endif
     }
     if (-1 < yUp) {
@@ -201,6 +219,8 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
       }
 #elif VL
       line_vl_push_strong(yUpSend, (uint8_t*)buf, cnt + sizeof(uint16_t));
+#elif CAF
+      assert((size_t)msgSz == caf_push_bulk(yUpSend, (uint64_t*)buf, msgSz));
 #endif
     }
 
@@ -215,6 +235,8 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
       }
 #elif VL
       line_vl_pop_weak(xUpRecv, (uint8_t*)buf, &rcnt);
+#elif CAF
+      assert((size_t)msgSz == caf_pop_bulk(xUpRecv, (uint64_t*)buf, msgSz));
 #endif
     }
     if (-1 < yUp) {
@@ -227,6 +249,8 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
       }
 #elif VL
       line_vl_pop_weak(yUpRecv, (uint8_t*)buf, &rcnt);
+#elif CAF
+      assert((size_t)msgSz == caf_pop_bulk(yUpRecv, (uint64_t*)buf, msgSz));
 #endif
     }
 
@@ -248,6 +272,8 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
       }
 #elif VL
       line_vl_push_strong(xDnSend, (uint8_t*)buf, cnt + sizeof(uint16_t));
+#elif CAF
+      assert((size_t)msgSz == caf_push_bulk(xDnSend, (uint64_t*)buf, msgSz));
 #endif
     }
     if (-1 < yDn) {
@@ -260,6 +286,8 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
       }
 #elif VL
       line_vl_push_strong(yDnSend, (uint8_t*)buf, cnt + sizeof(uint16_t));
+#elif CAF
+      assert((size_t)msgSz == caf_push_bulk(yDnSend, (uint64_t*)buf, msgSz));
 #endif
     }
 
@@ -274,6 +302,8 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
       }
 #elif VL
       line_vl_pop_weak(xUpRecv, (uint8_t*)buf, &rcnt);
+#elif CAF
+      assert((size_t)msgSz == caf_pop_bulk(xUpRecv, (uint64_t*)buf, msgSz));
 #endif
     }
     if (-1 < yDn) {
@@ -286,6 +316,8 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
       }
 #elif VL
       line_vl_pop_weak(yDnRecv, (uint8_t*)buf, &rcnt);
+#elif CAF
+      assert((size_t)msgSz == caf_pop_bulk(yDnRecv, (uint64_t*)buf, msgSz));
 #endif
     }
 
@@ -307,6 +339,8 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
       }
 #elif VL
       line_vl_push_strong(xDnSend, (uint8_t*)buf, cnt + sizeof(uint16_t));
+#elif CAF
+      assert((size_t)msgSz == caf_push_bulk(xDnSend, (uint64_t*)buf, msgSz));
 #endif
     }
     if (-1 < yUp) {
@@ -319,6 +353,8 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
       }
 #elif VL
       line_vl_push_strong(yUpSend, (uint8_t*)buf, cnt + sizeof(uint16_t));
+#elif CAF
+      assert((size_t)msgSz == caf_push_bulk(yUpSend, (uint64_t*)buf, msgSz));
 #endif
     }
 
@@ -333,6 +369,8 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
       }
 #elif VL
       line_vl_pop_weak(xDnRecv, (uint8_t*)buf, &rcnt);
+#elif CAF
+      assert((size_t)msgSz == caf_pop_bulk(xDnRecv, (uint64_t*)buf, msgSz));
 #endif
     }
     if (-1 < yUp) {
@@ -345,6 +383,8 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
       }
 #elif VL
       line_vl_pop_weak(yUpRecv, (uint8_t*)buf, &rcnt);
+#elif CAF
+      assert((size_t)msgSz == caf_pop_bulk(yUpRecv, (uint64_t*)buf, msgSz));
 #endif
     }
 
@@ -366,6 +406,8 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
       }
 #elif VL
       line_vl_push_strong(xUpSend, (uint8_t*)buf, cnt + sizeof(uint16_t));
+#elif CAF
+      assert((size_t)msgSz == caf_push_bulk(xUpSend, (uint64_t*)buf, msgSz));
 #endif
     }
     if (-1 < yDn) {
@@ -378,6 +420,8 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
       }
 #elif VL
       line_vl_push_strong(yDnSend, (uint8_t*)buf, cnt + sizeof(uint16_t));
+#elif CAF
+      assert((size_t)msgSz == caf_push_bulk(yDnSend, (uint64_t*)buf, msgSz));
 #endif
     }
 
@@ -403,6 +447,11 @@ void halo(const int xUp, const int xDn, const int yUp, const int yDn,
           vlendpt_t *xUpSend, vlendpt_t *xDnSend, vlendpt_t *yUpSend,
           vlendpt_t *yDnSend, vlendpt_t *xUpRecv, vlendpt_t *xDnRecv,
           vlendpt_t *yUpRecv, vlendpt_t *yDnRecv
+#elif CAF
+          double *msg,
+          cafendpt_t *xUpSend, cafendpt_t *xDnSend, cafendpt_t *yUpSend,
+          cafendpt_t *yDnSend, cafendpt_t *xUpRecv, cafendpt_t *xDnRecv,
+          cafendpt_t *yUpRecv, cafendpt_t *yDnRecv
 #endif
           ) {
 
@@ -416,6 +465,8 @@ void halo(const int xUp, const int xDn, const int yUp, const int yDn,
   uint16_t *blkId = (uint16_t*)buf; /* used to reorder cache blocks */
   uint16_t idx;
   size_t cnt;
+#elif CAF
+  char *buf = new char[msgSz];
 #endif
   for (i = 0; repeats > i; ++i) {
     compute(sleep_nsec);
@@ -437,6 +488,8 @@ void halo(const int xUp, const int xDn, const int yUp, const int yDn,
       }
 #elif VL
       line_vl_push_strong(xUpSend, (uint8_t*)buf, cnt + sizeof(uint16_t));
+#elif CAF
+      assert((size_t)msgSz == caf_push_bulk(xUpSend, (uint64_t*)buf, msgSz));
 #endif
     }
     if (-1 < xDn) {
@@ -449,6 +502,8 @@ void halo(const int xUp, const int xDn, const int yUp, const int yDn,
       }
 #elif VL
       line_vl_push_strong(xDnSend, (uint8_t*)buf, cnt + sizeof(uint16_t));
+#elif CAF
+      assert((size_t)msgSz == caf_push_bulk(xDnSend, (uint64_t*)buf, msgSz));
 #endif
     }
     if (-1 < yUp) {
@@ -461,6 +516,8 @@ void halo(const int xUp, const int xDn, const int yUp, const int yDn,
       }
 #elif VL
       line_vl_push_strong(yUpSend, (uint8_t*)buf, cnt + sizeof(uint16_t));
+#elif CAF
+      assert((size_t)msgSz == caf_push_bulk(yUpSend, (uint64_t*)buf, msgSz));
 #endif
     }
     if (-1 < yDn) {
@@ -473,6 +530,8 @@ void halo(const int xUp, const int xDn, const int yUp, const int yDn,
       }
 #elif VL
       line_vl_push_strong(yDnSend, (uint8_t*)buf, cnt + sizeof(uint16_t));
+#elif CAF
+      assert((size_t)msgSz == caf_push_bulk(yDnSend, (uint64_t*)buf, msgSz));
 #endif
     }
 
@@ -487,6 +546,8 @@ void halo(const int xUp, const int xDn, const int yUp, const int yDn,
       }
 #elif VL
       line_vl_pop_weak(xUpRecv, (uint8_t*)buf, &cnt);
+#elif CAF
+      assert((size_t)msgSz == caf_pop_bulk(xUpRecv, (uint64_t*)buf, msgSz));
 #endif
     }
     if (-1 < xDn) {
@@ -499,6 +560,8 @@ void halo(const int xUp, const int xDn, const int yUp, const int yDn,
       }
 #elif VL
       line_vl_pop_weak(xDnRecv, (uint8_t*)buf, &cnt);
+#elif CAF
+      assert((size_t)msgSz == caf_pop_bulk(xDnRecv, (uint64_t*)buf, msgSz));
 #endif
     }
     if (-1 < yUp) {
@@ -511,6 +574,8 @@ void halo(const int xUp, const int xDn, const int yUp, const int yDn,
       }
 #elif VL
       line_vl_pop_weak(yUpRecv, (uint8_t*)buf, &cnt);
+#elif CAF
+      assert((size_t)msgSz == caf_pop_bulk(yUpRecv, (uint64_t*)buf, msgSz));
 #endif
     }
     if (-1 < yDn) {
@@ -523,6 +588,8 @@ void halo(const int xUp, const int xDn, const int yUp, const int yDn,
       }
 #elif VL
       line_vl_pop_weak(yDnRecv, (uint8_t*)buf, &cnt);
+#elif CAF
+      assert((size_t)msgSz == caf_pop_bulk(yDnRecv, (uint64_t*)buf, msgSz));
 #endif
     }
 
@@ -540,6 +607,8 @@ void incast(const bool isMaster,
             double *msg, boost_q_t *queue
 #elif VL
             double *msg, vlendpt_t *queue
+#elif CAF
+            double *msg, cafendpt_t *queue
 #endif
             ) {
   int i, j;
@@ -552,6 +621,8 @@ void incast(const bool isMaster,
   uint16_t *blkId = (uint16_t*)buf; /* used to reorder cache blocks */
   uint16_t idx;
   size_t cnt;
+#elif CAF
+  char *buf = new char[msgSz];
 #endif
   for (i = 0; repeats > i; ++i) {
 
@@ -567,6 +638,8 @@ void incast(const bool isMaster,
         for (idx = 0; nblks > idx; ++idx) {
           line_vl_pop_weak(queue, (uint8_t*)buf, &cnt);
         }
+#elif CAF
+        assert((size_t)msgSz == caf_pop_bulk(queue, (uint64_t*)buf, msgSz));
 #endif
         if (sleep_nsec) {
           compute(sleep_nsec);
@@ -586,6 +659,8 @@ void incast(const bool isMaster,
         cnt = (nblks - 1) > idx ? 56 : (msgSz - idx * 56);
         line_vl_push_strong(queue, (uint8_t*)buf, cnt + sizeof(uint16_t));
       }
+#elif CAF
+      assert((size_t)msgSz == caf_push_bulk(queue, (uint64_t*)buf, msgSz));
 #endif
       long sleep_tmp =
           ((i % burst_period) > slow_period) ? -burst_amp : burst_amp;
@@ -632,6 +707,11 @@ void *worker(void *arg) {
   } else {
     open_byte_vl_as_producer(1, queue, 1);
   }
+#elif CAF
+  double msg;
+  cafendpt_t endpt;
+  cafendpt_t *queue = &endpt;
+  open_caf(1, queue);
 #endif
 #else /* NOT EMBER_INCAST */
   int x, y, xUp, xDn, yUp, yDn;
@@ -731,6 +811,34 @@ void *worker(void *arg) {
   if (-1 < yDn) {
     open_byte_vl_as_producer(yDnTx, yDnSend, 1);
     open_byte_vl_as_consumer(yDnRx, yDnRecv, 1);
+  }
+#elif CAF
+  char msgBuf[msgSz];
+  double* msg = (double*) msgBuf;
+  cafendpt_t endpts[8];
+  cafendpt_t *xUpSend = &endpts[0];
+  cafendpt_t *xDnSend = &endpts[1];
+  cafendpt_t *yUpSend = &endpts[2];
+  cafendpt_t *yDnSend = &endpts[3];
+  cafendpt_t *xUpRecv = &endpts[4];
+  cafendpt_t *xDnRecv = &endpts[5];
+  cafendpt_t *yUpRecv = &endpts[6];
+  cafendpt_t *yDnRecv = &endpts[7];
+  if (-1 < xUp) {
+    open_caf(xUpTx, xUpSend);
+    open_caf(xUpRx, xUpRecv);
+  }
+  if (-1 < xDn) {
+    open_caf(xDnTx, xDnSend);
+    open_caf(xDnRx, xDnRecv);
+  }
+  if (-1 < yUp) {
+    open_caf(yUpTx, yUpSend);
+    open_caf(yUpRx, yUpRecv);
+  }
+  if (-1 < yDn) {
+    open_caf(yDnTx, yDnSend);
+    open_caf(yDnRx, yDnRecv);
   }
 #endif
 

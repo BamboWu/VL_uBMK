@@ -32,6 +32,10 @@
 #include "vl/vl.h"
 #endif
 
+#ifdef CAF
+#include "caf.h"
+#endif
+
 #ifdef ZMQ
 #include <assert.h>
 #include <zmq.h>
@@ -106,6 +110,24 @@ struct vl_q_t {
       if(out_assigned)close_twin_vl_as_consumer(out);
     }
     ~vl_q_t() { close(); }
+};
+
+#elif CAF
+
+struct caf_q_t {
+  cafendpt_t in;
+  cafendpt_t out;
+  bool bounded_push(data_t data) { caf_push_strong(&in, data); return true; }
+  bool pop(data_t &data) { return caf_pop_non(&out, (uint64_t*)&data); }
+  void open(int qid) {
+    open_caf(qid, &in);
+    open_caf(qid, &out);
+  }
+  void close() {
+    close_caf(in);
+    close_caf(out);
+  }
+  ~caf_q_t() { close(); }
 };
 
 #elif ZMQ
@@ -213,6 +235,8 @@ void*
 input_stream(void* args){
 #ifdef VL
     vl_q_t* q_out = (vl_q_t*) args;
+#elif CAF
+    caf_q_t* q_out = (caf_q_t*) args;
 #elif ZMQ
     zmq_q_t* q_out = (zmq_q_t*) args;
 #else
@@ -259,6 +283,9 @@ struct firArgs {
 #ifdef VL
     vl_q_t* q_in;
     vl_q_t* q_out;
+#elif CAF
+    caf_q_t* q_in;
+    caf_q_t* q_out;
 #elif ZMQ
     zmq_q_t* q_in;
     zmq_q_t* q_out;
@@ -317,6 +344,8 @@ void*
 output_stream(void* args){
 #ifdef VL
     vl_q_t* q_in = (vl_q_t*) args;
+#elif CAF
+    caf_q_t* q_in = (caf_q_t*) args;
 #elif ZMQ
     zmq_q_t* q_in = (zmq_q_t*) args;
 #else
@@ -412,6 +441,12 @@ int main( int argc, char **argv )
         }
         p_qs[i].open(fds[i], 1, true);
         c_qs[i].open(fds[i], 1, false);
+    }
+#elif CAF
+    caf_q_t* qs[stages+1];
+    for(unsigned int i=0; i <= stages; i++){
+        qs[i] = new caf_q_t();
+        qs[i]->open(i);
     }
 #elif ZMQ
     ctx = zmq_ctx_new();

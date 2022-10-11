@@ -652,7 +652,10 @@ int main(int argc, char *argv[]) {
 #ifdef VL
     line_vl_push_strong(&prod, (uint8_t*)pkts, sizeof(Packet*) * j);
 #elif CAF
-    assert(j == caf_push_bulk(&prod, (uint64_t*)pkts, j));
+    size_t k = 0; // successfully pushed count
+    do {
+      k += caf_push_bulk(&prod, (uint64_t*)&pkts[k], j - k);
+    } while (k < j);
 #elif ZMQ
     assert((int64_t)(sizeof(Packet*) * j) ==
             zmq_send(prod, pkts, sizeof(Packet*) * j, 0));

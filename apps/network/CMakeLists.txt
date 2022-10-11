@@ -63,7 +63,7 @@ else()
                              -DNUM_STAGE1=4 -DNUM_STAGE2=4
                              -DSTAGE1_READ -DSTAGE1_WRITE
                              -DSTAGE2_READ -DSTAGE2_WRITE
-                             -DBULK_SIZE=8 -DPOOL_SIZE=420)
+                             -DBULK_SIZE=8 -DPOOL_SIZE=64)
   target_link_libraries(pipeline_qmd ${CAF_LIBRARY})
 
   add_microbenchmark(pipeline_caf pipeline.cpp)
@@ -71,7 +71,7 @@ else()
                              -DNUM_STAGE1=4 -DNUM_STAGE2=4
                              -DSTAGE1_READ -DSTAGE1_WRITE
                              -DSTAGE2_READ -DSTAGE2_WRITE
-                             -DBULK_SIZE=8 -DPOOL_SIZE=420)
+                             -DBULK_SIZE=8 -DPOOL_SIZE=64)
   target_link_libraries(pipeline_caf ${CAF_LIBRARY})
 
   add_microbenchmark(firewall_qmd firewall.cpp)

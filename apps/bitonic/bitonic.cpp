@@ -1,10 +1,12 @@
 #include <iostream>
 #include <vector>
+#include <queue>
 #include <stdlib.h>
 #include <stdint.h>
 #include <malloc.h>
 #include <limits.h>
 #include <assert.h>
+#include <string.h>
 #include <atomic>
 #include <sstream>
 
@@ -106,7 +108,9 @@ void* slave(void* args) {
     return NULL;
   }
 #elif CAF
+  const size_t msg_size = sizeof(msg);
   cafendpt_t tosort_cons, topair_prod;
+  char *pmsg;
   open_caf(TOSORT_QID, &tosort_cons);
   open_caf(TOPAIR_QID, &topair_prod);
 #elif ZMQ
@@ -157,11 +161,12 @@ void* slave(void* args) {
 #ifdef VL
       cnt = MSG_SIZE;
       line_vl_pop_non(&tosort_cons, (uint8_t*)&msg, &cnt);
-      if (MSG_SIZE == cnt) { // get a sorting task
+      if (MSG_SIZE == cnt) { /* } */ // get a sorting task
 #elif CAF
-      if (MSG_SIZE == caf_pop_bulk(&tosort_cons, (uint64_t*)&msg, MSG_SIZE)) {
+      if (caf_pop_non(&tosort_cons, (uint64_t*)&pmsg)) { /* } */
+        memcpy((void*)&msg, (void*)pmsg, msg_size);
 #elif ZMQ
-      if(0 < zmq_recv(tosort_cons, &msg, msg_size, ZMQ_DONTWAIT)) {
+      if(0 < zmq_recv(tosort_cons, &msg, msg_size, ZMQ_DONTWAIT)) { /* } */
 #elif BLFQ
       if (tosort.pop(msg)) {
 #endif
@@ -305,8 +310,7 @@ void* slave(void* args) {
 #ifdef VL
       line_vl_push_weak(&topair_prod, (uint8_t*)&msg, MSG_SIZE);
 #elif CAF
-      assert(MSG_SIZE ==
-             caf_push_bulk(&topair_prod, (uint64_t*)&msg, MSG_SIZE));
+      caf_push_strong(&topair_prod, (uint64_t)pmsg);
 #elif ZMQ
       assert(msg_size == zmq_send(topair_prod, &msg, msg_size, 0));
 #elif BLFQ
@@ -370,7 +374,10 @@ void sort(int *arr, const uint64_t len, const int num_consumer_lines) {
     return;
   }
 #elif CAF
+  const int msg_size = sizeof(Message<int>);
   cafendpt_t tosort_prod, topair_cons;
+  char *pmsg;
+  std::queue<char*> msg_pool;
   open_caf(TOSORT_QID, &tosort_prod);
   open_caf(TOPAIR_QID, &topair_cons);
 #elif ZMQ
@@ -463,7 +470,9 @@ void sort(int *arr, const uint64_t len, const int num_consumer_lines) {
 #ifdef VL
     line_vl_push_weak(&tosort_prod, (uint8_t*)&msg, MSG_SIZE);
 #elif CAF
-    assert(MSG_SIZE == caf_push_bulk(&tosort_prod, (uint64_t*)&msg, MSG_SIZE));
+    Message<int> *pmsg = (Message<int>*) malloc(msg_size);
+    memcpy((void*)pmsg, (void*)&msg, msg_size);
+    caf_push_strong(&tosort_prod, (uint64_t)pmsg);
 #elif ZMQ
     assert(msg_size == zmq_send(tosort_prod, &msg, msg_size, 0));
 #elif BLFQ
@@ -480,12 +489,14 @@ void sort(int *arr, const uint64_t len, const int num_consumer_lines) {
 #ifdef VL
     cnt = MSG_SIZE;
     line_vl_pop_non(&topair_cons, (uint8_t*)&msg, &cnt);
-    if (MSG_SIZE == cnt) {
+    if (MSG_SIZE == cnt) { /* } */
 #elif CAF
-    if (MSG_SIZE == caf_pop_bulk(&topair_cons, (uint64_t*)&msg, MSG_SIZE)) {
+    if (caf_pop_non(&topair_cons, (uint64_t*)&pmsg)) { /* } */
+      memcpy((void*)&msg, (void*)pmsg, msg_size);
+      msg_pool.push(pmsg);
 #elif ZMQ
     cnt = zmq_recv(topair_cons, &msg, msg_size, ZMQ_DONTWAIT);
-    if (msg_size == cnt) {
+    if (msg_size == cnt) { /* } */
 #elif BLFQ
     if (topair.pop(msg)) {
 #endif
@@ -555,8 +566,14 @@ void sort(int *arr, const uint64_t len, const int num_consumer_lines) {
 #ifdef VL
             line_vl_push_weak(&tosort_prod, (uint8_t*)&msg, MSG_SIZE);
 #elif CAF
-            assert(MSG_SIZE ==
-                   caf_push_bulk(&tosort_prod, (uint64_t*)&msg, MSG_SIZE));
+            if (msg_pool.empty()) {
+              pmsg = (char*) malloc(msg_size);
+            } else {
+              pmsg = msg_pool.front();
+              msg_pool.pop();
+            }
+            memcpy((void*)pmsg, (void*)&msg, msg_size);
+            caf_push_strong(&tosort_prod, (uint64_t)pmsg);
 #elif ZMQ
             assert(msg_size == zmq_send(tosort_prod, &msg, msg_size, 0));
 #elif BLFQ
@@ -584,8 +601,14 @@ void sort(int *arr, const uint64_t len, const int num_consumer_lines) {
 #ifdef VL
             line_vl_push_weak(&tosort_prod, (uint8_t*)&msg, MSG_SIZE);
 #elif CAF
-            assert(MSG_SIZE ==
-                   caf_push_bulk(&tosort_prod, (uint64_t*)&msg, MSG_SIZE));
+            if (msg_pool.empty()) {
+              pmsg = (char*) malloc(msg_size);
+            } else {
+              pmsg = msg_pool.front();
+              msg_pool.pop();
+            }
+            memcpy((void*)pmsg, (void*)&msg, msg_size);
+            caf_push_strong(&tosort_prod, (uint64_t)pmsg);
 #elif ZMQ
             assert(msg_size == zmq_send(tosort_prod, &msg, msg_size, 0));
 #elif BLFQ
@@ -643,8 +666,14 @@ void sort(int *arr, const uint64_t len, const int num_consumer_lines) {
 #ifdef VL
               line_vl_push_weak(&tosort_prod, (uint8_t*)&msg, MSG_SIZE);
 #elif CAF
-              assert(MSG_SIZE ==
-                     caf_push_bulk(&tosort_prod, (uint64_t*)&msg, MSG_SIZE));
+              if (msg_pool.empty()) {
+                pmsg = (char*) malloc(msg_size);
+              } else {
+                pmsg = msg_pool.front();
+                msg_pool.pop();
+              }
+              memcpy((void*)pmsg, (void*)&msg, msg_size);
+              caf_push_strong(&tosort_prod, (uint64_t)pmsg);
 #elif ZMQ
               assert(msg_size == zmq_send(tosort_prod, &msg, msg_size, 0));
 #elif BLFQ
@@ -696,8 +725,14 @@ void sort(int *arr, const uint64_t len, const int num_consumer_lines) {
 #ifdef VL
           line_vl_push_weak(&tosort_prod, (uint8_t*)&msg, MSG_SIZE);
 #elif CAF
-          assert(MSG_SIZE ==
-                 caf_push_bulk(&tosort_prod, (uint64_t*)&msg, MSG_SIZE));
+          if (msg_pool.empty()) {
+            pmsg = (char*) malloc(msg_size);
+          } else {
+            pmsg = msg_pool.front();
+            msg_pool.pop();
+          }
+          memcpy((void*)pmsg, (void*)&msg, msg_size);
+          caf_push_strong(&tosort_prod, (uint64_t)pmsg);
 #elif ZMQ
           assert(msg_size == zmq_send(tosort_prod, &msg, msg_size, 0));
 #elif BLFQ
@@ -719,11 +754,18 @@ void sort(int *arr, const uint64_t len, const int num_consumer_lines) {
       msg.arr.beg = feed_in;
       //msg.arr.end = feed_in + mini_task_len;
 #ifdef VL
-      if (line_vl_push_non(&tosort_prod, (uint8_t*)&msg, MSG_SIZE)) {
+      if (line_vl_push_non(&tosort_prod, (uint8_t*)&msg, MSG_SIZE)) { /* } */
 #elif CAF
-      if (MSG_SIZE == caf_push_bulk(&tosort_prod, (uint64_t*)&msg, MSG_SIZE)) {
+      if (msg_pool.empty()) {
+        pmsg = (char*) malloc(msg_size);
+      } else {
+        pmsg = msg_pool.front();
+        msg_pool.pop();
+      }
+      memcpy((void*)pmsg, (void*)&msg, msg_size);
+      if (caf_push_non(&tosort_prod, (uint64_t)pmsg)) { /* } */
 #elif ZMQ
-      if (msg_size == zmq_send(tosort_prod, &msg, msg_size, 0)) {
+      if (msg_size == zmq_send(tosort_prod, &msg, msg_size, 0)) { /* } */
 #elif BLFQ
       if (tosort.bounded_push(msg)) {
 #endif
@@ -736,6 +778,9 @@ void sort(int *arr, const uint64_t len, const int num_consumer_lines) {
 #ifdef VL
     } else {
       line_vl_push_non(&tosort_prod, (uint8_t*)&msg, 0);
+#elif CAF
+    } else {
+      msg_pool.push(pmsg);
 #endif
     }
   } // while (true)

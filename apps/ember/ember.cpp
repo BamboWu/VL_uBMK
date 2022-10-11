@@ -144,7 +144,9 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
   uint16_t idx;
   size_t cnt, rcnt;
 #elif CAF
-  char *buf = new char[msgSz];
+  char *buf0 = new char[msgSz];
+  char *buf1 = new char[msgSz];
+  char *pmsg;
 #endif
   for (i = 0; repeats > i; ++i) {
 
@@ -169,7 +171,8 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
 #elif VL
       line_vl_pop_weak(xDnRecv, (uint8_t*)buf, &rcnt);
 #elif CAF
-      assert((size_t)msgSz == caf_pop_bulk(xDnRecv, (uint64_t*)buf, msgSz));
+      caf_pop_strong(xDnRecv, (uint64_t*)&pmsg);
+      memcpy((void*)buf0, (void*)pmsg, msgSz);
 #endif
     }
     if (-1 < yDn) {
@@ -183,7 +186,8 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
 #elif VL
       line_vl_pop_weak(yDnRecv, (uint8_t*)buf, &rcnt);
 #elif CAF
-      assert((size_t)msgSz == caf_pop_bulk(yDnRecv, (uint64_t*)buf, msgSz));
+      caf_pop_strong(yDnRecv, (uint64_t*)&pmsg);
+      memcpy((void*)buf1, (void*)pmsg, msgSz);
 #endif
     }
 
@@ -206,7 +210,7 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
 #elif VL
       line_vl_push_strong(xUpSend, (uint8_t*)buf, cnt + sizeof(uint16_t));
 #elif CAF
-      assert((size_t)msgSz == caf_push_bulk(xUpSend, (uint64_t*)buf, msgSz));
+      caf_push_strong(xUpSend, (uint64_t)buf0);
 #endif
     }
     if (-1 < yUp) {
@@ -220,7 +224,7 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
 #elif VL
       line_vl_push_strong(yUpSend, (uint8_t*)buf, cnt + sizeof(uint16_t));
 #elif CAF
-      assert((size_t)msgSz == caf_push_bulk(yUpSend, (uint64_t*)buf, msgSz));
+      caf_push_strong(yUpSend, (uint64_t)buf1);
 #endif
     }
 
@@ -236,7 +240,8 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
 #elif VL
       line_vl_pop_weak(xUpRecv, (uint8_t*)buf, &rcnt);
 #elif CAF
-      assert((size_t)msgSz == caf_pop_bulk(xUpRecv, (uint64_t*)buf, msgSz));
+      caf_pop_strong(xUpRecv, (uint64_t*)&pmsg);
+      memcpy((void*)buf0, (void*)pmsg, msgSz);
 #endif
     }
     if (-1 < yUp) {
@@ -250,7 +255,8 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
 #elif VL
       line_vl_pop_weak(yUpRecv, (uint8_t*)buf, &rcnt);
 #elif CAF
-      assert((size_t)msgSz == caf_pop_bulk(yUpRecv, (uint64_t*)buf, msgSz));
+      caf_pop_strong(yUpRecv, (uint64_t*)&pmsg);
+      memcpy((void*)buf1, (void*)pmsg, msgSz);
 #endif
     }
 
@@ -273,7 +279,7 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
 #elif VL
       line_vl_push_strong(xDnSend, (uint8_t*)buf, cnt + sizeof(uint16_t));
 #elif CAF
-      assert((size_t)msgSz == caf_push_bulk(xDnSend, (uint64_t*)buf, msgSz));
+      caf_push_strong(xDnSend, (uint64_t)buf0);
 #endif
     }
     if (-1 < yDn) {
@@ -287,7 +293,7 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
 #elif VL
       line_vl_push_strong(yDnSend, (uint8_t*)buf, cnt + sizeof(uint16_t));
 #elif CAF
-      assert((size_t)msgSz == caf_push_bulk(yDnSend, (uint64_t*)buf, msgSz));
+      caf_push_strong(yDnSend, (uint64_t)buf1);
 #endif
     }
 
@@ -303,7 +309,8 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
 #elif VL
       line_vl_pop_weak(xUpRecv, (uint8_t*)buf, &rcnt);
 #elif CAF
-      assert((size_t)msgSz == caf_pop_bulk(xUpRecv, (uint64_t*)buf, msgSz));
+      caf_pop_strong(xUpRecv, (uint64_t*)&pmsg);
+      memcpy((void*)buf0, (void*)pmsg, msgSz);
 #endif
     }
     if (-1 < yDn) {
@@ -317,7 +324,8 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
 #elif VL
       line_vl_pop_weak(yDnRecv, (uint8_t*)buf, &rcnt);
 #elif CAF
-      assert((size_t)msgSz == caf_pop_bulk(yDnRecv, (uint64_t*)buf, msgSz));
+      caf_pop_strong(yDnRecv, (uint64_t*)&pmsg);
+      memcpy((void*)buf1, (void*)pmsg, msgSz);
 #endif
     }
 
@@ -340,7 +348,7 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
 #elif VL
       line_vl_push_strong(xDnSend, (uint8_t*)buf, cnt + sizeof(uint16_t));
 #elif CAF
-      assert((size_t)msgSz == caf_push_bulk(xDnSend, (uint64_t*)buf, msgSz));
+      caf_push_strong(xDnSend, (uint64_t)buf0);
 #endif
     }
     if (-1 < yUp) {
@@ -354,7 +362,7 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
 #elif VL
       line_vl_push_strong(yUpSend, (uint8_t*)buf, cnt + sizeof(uint16_t));
 #elif CAF
-      assert((size_t)msgSz == caf_push_bulk(yUpSend, (uint64_t*)buf, msgSz));
+      caf_push_strong(yUpSend, (uint64_t)buf1);
 #endif
     }
 
@@ -370,7 +378,8 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
 #elif VL
       line_vl_pop_weak(xDnRecv, (uint8_t*)buf, &rcnt);
 #elif CAF
-      assert((size_t)msgSz == caf_pop_bulk(xDnRecv, (uint64_t*)buf, msgSz));
+      caf_pop_strong(xDnRecv, (uint64_t*)&pmsg);
+      memcpy((void*)buf0, (void*)pmsg, msgSz);
 #endif
     }
     if (-1 < yUp) {
@@ -384,7 +393,8 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
 #elif VL
       line_vl_pop_weak(yUpRecv, (uint8_t*)buf, &rcnt);
 #elif CAF
-      assert((size_t)msgSz == caf_pop_bulk(yUpRecv, (uint64_t*)buf, msgSz));
+      caf_pop_strong(yUpRecv, (uint64_t*)&pmsg);
+      memcpy((void*)buf1, (void*)pmsg, msgSz);
 #endif
     }
 
@@ -407,7 +417,7 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
 #elif VL
       line_vl_push_strong(xUpSend, (uint8_t*)buf, cnt + sizeof(uint16_t));
 #elif CAF
-      assert((size_t)msgSz == caf_push_bulk(xUpSend, (uint64_t*)buf, msgSz));
+      caf_push_strong(xUpSend, (uint64_t)buf0);
 #endif
     }
     if (-1 < yDn) {
@@ -421,7 +431,7 @@ void sweep(const int xUp, const int xDn, const int yUp, const int yDn,
 #elif VL
       line_vl_push_strong(yDnSend, (uint8_t*)buf, cnt + sizeof(uint16_t));
 #elif CAF
-      assert((size_t)msgSz == caf_push_bulk(yDnSend, (uint64_t*)buf, msgSz));
+      caf_push_strong(yDnSend, (uint64_t)buf1);
 #endif
     }
 
@@ -466,7 +476,11 @@ void halo(const int xUp, const int xDn, const int yUp, const int yDn,
   uint16_t idx;
   size_t cnt;
 #elif CAF
-  char *buf = new char[msgSz];
+  char *buf[8];
+  for (int i = 0; 8 > i; ++i) {
+    buf[i] = new char[msgSz];
+  }
+  char *pmsg;
 #endif
   for (i = 0; repeats > i; ++i) {
     compute(sleep_nsec);
@@ -489,7 +503,8 @@ void halo(const int xUp, const int xDn, const int yUp, const int yDn,
 #elif VL
       line_vl_push_strong(xUpSend, (uint8_t*)buf, cnt + sizeof(uint16_t));
 #elif CAF
-      assert((size_t)msgSz == caf_push_bulk(xUpSend, (uint64_t*)buf, msgSz));
+      memcpy((void*)buf[0], (void*)buf[4], msgSz);
+      caf_push_strong(xUpSend, (uint64_t)buf[0]);
 #endif
     }
     if (-1 < xDn) {
@@ -503,7 +518,8 @@ void halo(const int xUp, const int xDn, const int yUp, const int yDn,
 #elif VL
       line_vl_push_strong(xDnSend, (uint8_t*)buf, cnt + sizeof(uint16_t));
 #elif CAF
-      assert((size_t)msgSz == caf_push_bulk(xDnSend, (uint64_t*)buf, msgSz));
+      memcpy((void*)buf[1], (void*)buf[5], msgSz);
+      caf_push_strong(xDnSend, (uint64_t)buf[1]);
 #endif
     }
     if (-1 < yUp) {
@@ -517,7 +533,8 @@ void halo(const int xUp, const int xDn, const int yUp, const int yDn,
 #elif VL
       line_vl_push_strong(yUpSend, (uint8_t*)buf, cnt + sizeof(uint16_t));
 #elif CAF
-      assert((size_t)msgSz == caf_push_bulk(yUpSend, (uint64_t*)buf, msgSz));
+      memcpy((void*)buf[2], (void*)buf[6], msgSz);
+      caf_push_strong(yUpSend, (uint64_t)buf[2]);
 #endif
     }
     if (-1 < yDn) {
@@ -531,7 +548,8 @@ void halo(const int xUp, const int xDn, const int yUp, const int yDn,
 #elif VL
       line_vl_push_strong(yDnSend, (uint8_t*)buf, cnt + sizeof(uint16_t));
 #elif CAF
-      assert((size_t)msgSz == caf_push_bulk(yDnSend, (uint64_t*)buf, msgSz));
+      memcpy((void*)buf[3], (void*)buf[7], msgSz);
+      caf_push_strong(yDnSend, (uint64_t)buf[3]);
 #endif
     }
 
@@ -547,7 +565,8 @@ void halo(const int xUp, const int xDn, const int yUp, const int yDn,
 #elif VL
       line_vl_pop_weak(xUpRecv, (uint8_t*)buf, &cnt);
 #elif CAF
-      assert((size_t)msgSz == caf_pop_bulk(xUpRecv, (uint64_t*)buf, msgSz));
+      caf_pop_strong(xUpRecv, (uint64_t*)&pmsg);
+      memcpy((void*)buf[4], (void*)pmsg, msgSz);
 #endif
     }
     if (-1 < xDn) {
@@ -561,7 +580,8 @@ void halo(const int xUp, const int xDn, const int yUp, const int yDn,
 #elif VL
       line_vl_pop_weak(xDnRecv, (uint8_t*)buf, &cnt);
 #elif CAF
-      assert((size_t)msgSz == caf_pop_bulk(xDnRecv, (uint64_t*)buf, msgSz));
+      caf_pop_strong(xDnRecv, (uint64_t*)&pmsg);
+      memcpy((void*)buf[5], (void*)pmsg, msgSz);
 #endif
     }
     if (-1 < yUp) {
@@ -575,7 +595,8 @@ void halo(const int xUp, const int xDn, const int yUp, const int yDn,
 #elif VL
       line_vl_pop_weak(yUpRecv, (uint8_t*)buf, &cnt);
 #elif CAF
-      assert((size_t)msgSz == caf_pop_bulk(yUpRecv, (uint64_t*)buf, msgSz));
+      caf_pop_strong(yUpRecv, (uint64_t*)&pmsg);
+      memcpy((void*)buf[6], (void*)pmsg, msgSz);
 #endif
     }
     if (-1 < yDn) {
@@ -589,7 +610,8 @@ void halo(const int xUp, const int xDn, const int yUp, const int yDn,
 #elif VL
       line_vl_pop_weak(yDnRecv, (uint8_t*)buf, &cnt);
 #elif CAF
-      assert((size_t)msgSz == caf_pop_bulk(yDnRecv, (uint64_t*)buf, msgSz));
+      caf_pop_strong(yDnRecv, (uint64_t*)&pmsg);
+      memcpy((void*)buf[7], (void*)pmsg, msgSz);
 #endif
     }
 
@@ -623,6 +645,7 @@ void incast(const bool isMaster,
   size_t cnt;
 #elif CAF
   char *buf = new char[msgSz];
+  char *pmsg;
 #endif
   for (i = 0; repeats > i; ++i) {
 
@@ -639,7 +662,8 @@ void incast(const bool isMaster,
           line_vl_pop_weak(queue, (uint8_t*)buf, &cnt);
         }
 #elif CAF
-        assert((size_t)msgSz == caf_pop_bulk(queue, (uint64_t*)buf, msgSz));
+        caf_pop_strong(queue, (uint64_t*)&pmsg);
+        memcpy((void*)buf, (void*)pmsg, msgSz);
 #endif
         if (sleep_nsec) {
           compute(sleep_nsec);
@@ -660,7 +684,10 @@ void incast(const bool isMaster,
         line_vl_push_strong(queue, (uint8_t*)buf, cnt + sizeof(uint16_t));
       }
 #elif CAF
-      assert((size_t)msgSz == caf_push_bulk(queue, (uint64_t*)buf, msgSz));
+      for (int i = 0; msgSz > i; ++i) {
+        buf[i] = 0;
+      }
+      caf_push_strong(queue, (uint64_t)buf);
 #endif
       long sleep_tmp =
           ((i % burst_period) > slow_period) ? -burst_amp : burst_amp;

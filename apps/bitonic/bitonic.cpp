@@ -166,7 +166,7 @@ void* slave(void* args) {
       if (caf_pop_non(&tosort_cons, (uint64_t*)&pmsg)) { /* } */
         memcpy((void*)&msg, (void*)pmsg, msg_size);
 #elif ZMQ
-      if(0 < zmq_recv(tosort_cons, &msg, msg_size, ZMQ_DONTWAIT)) { /* } */
+      if (0 < zmq_recv(tosort_cons, &msg, msg_size, ZMQ_DONTWAIT)) { /* } */
 #elif BLFQ
       if (tosort.pop(msg)) {
 #endif
@@ -219,7 +219,7 @@ void* slave(void* args) {
           oss[desired_core] << "  excl_reload_tosort(" << msg.arr.beg <<
             ", " << (uint64_t)msg.arr.exp << ", swap)\n";
 #endif
-          msg.arr.beg+= mini_task_len;
+          msg.arr.beg += mini_task_len;
           msg.arr.loaded = loaded = true;
 #ifdef DBG
           oss[desired_core] << "  excl_reload(" << msg.arr.beg << ", " <<
@@ -470,7 +470,7 @@ void sort(int *arr, const uint64_t len, const int num_consumer_lines) {
 #ifdef VL
     line_vl_push_weak(&tosort_prod, (uint8_t*)&msg, MSG_SIZE);
 #elif CAF
-    Message<int> *pmsg = (Message<int>*) malloc(msg_size);
+    pmsg = (char*) malloc(msg_size);
     memcpy((void*)pmsg, (void*)&msg, msg_size);
     caf_push_strong(&tosort_prod, (uint64_t)pmsg);
 #elif ZMQ
@@ -774,13 +774,14 @@ void sort(int *arr, const uint64_t len, const int num_consumer_lines) {
 #endif
         feed_in += mini_task_len;
         on_the_fly++;
+#ifdef CAF
+      } else { // !caf_push_non
+        msg_pool.push(pmsg);
+#endif
       }
 #ifdef VL
     } else {
       line_vl_push_non(&tosort_prod, (uint8_t*)&msg, 0);
-#elif CAF
-    } else {
-      msg_pool.push(pmsg);
 #endif
     }
   } // while (true)

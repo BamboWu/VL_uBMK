@@ -677,6 +677,7 @@ int main(int argc, char *argv[]) {
     line_vl_pop_non(&cons, (uint8_t*)pkts, &cnt);
 #elif CAF
     cnt = caf_pop_bulk(&cons, (uint64_t*)pkts, BULK_SIZE);
+    cnt *= sizeof(Packet*);
 #elif ZMQ
     cnt = zmq_recv(cons, pkts, sizeof(Packet*) * BULK_SIZE, ZMQ_DONTWAIT);
     if ((sizeof(Packet*) * BULK_SIZE) < cnt) {
@@ -699,6 +700,7 @@ int main(int argc, char *argv[]) {
         line_vl_push_weak(&prod, (uint8_t*)pkts, cnt2send);
 #elif CAF
         uint64_t j = 0; // successfully pushed count
+        cnt2send /= sizeof(Packet*);
         do {
           j += caf_push_bulk(&prod, (uint64_t*)&pkts[j], cnt2send - j);
         } while (j < cnt2send);

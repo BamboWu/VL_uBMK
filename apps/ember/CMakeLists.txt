@@ -92,4 +92,16 @@ else()
   add_microbenchmark(incast_qmd ember.cpp)
   target_compile_definitions(incast_qmd PRIVATE -DCAF -DEMBER_INCAST)
   target_link_libraries(incast_qmd ${CAF_LIBRARY})
+  add_microbenchmark(sweep2d_caf ember.cpp)
+  target_compile_definitions(sweep2d_caf PRIVATE -DCAF -DCAF_PREPUSH=1
+                             -DEMBER_SWEEP2D)
+  target_link_libraries(sweep2d_caf ${CAF_LIBRARY})
+  add_microbenchmark(halo2d_caf ember.cpp)
+  target_compile_definitions(halo2d_caf PRIVATE -DCAF -DCAF_PREPUSH=1
+                             -DEMBER_HALO2D)
+  target_link_libraries(halo2d_caf ${CAF_LIBRARY})
+  add_microbenchmark(incast_caf ember.cpp)
+  target_compile_definitions(incast_caf PRIVATE -DCAF -DCAF_PREPUSH=1
+                             -DEMBER_INCAST)
+  target_link_libraries(incast_caf ${CAF_LIBRARY})
 endif()

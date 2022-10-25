@@ -181,4 +181,30 @@ else()
                    bitonic_qmd_3S_Exp10F32
                    bitonic_qmd_7S_Exp10F32
                    bitonic_qmd_15S_Exp10F32)
+  add_boostable_microbmk(bitonic_caf_1S_Exp10F32 bitonic.cpp utils.cpp)
+  add_boostable_microbmk(bitonic_caf_3S_Exp10F32 bitonic.cpp utils.cpp)
+  add_boostable_microbmk(bitonic_caf_7S_Exp10F32 bitonic.cpp utils.cpp)
+  add_boostable_microbmk(bitonic_caf_15S_Exp10F32 bitonic.cpp utils.cpp)
+  target_link_libraries(bitonic_caf_1S_Exp10F32 ${CAF_LIBRARY})
+  target_link_libraries(bitonic_caf_3S_Exp10F32 ${CAF_LIBRARY})
+  target_link_libraries(bitonic_caf_7S_Exp10F32 ${CAF_LIBRARY})
+  target_link_libraries(bitonic_caf_15S_Exp10F32 ${CAF_LIBRARY})
+  target_compile_definitions(bitonic_caf_1S_Exp10F32 PRIVATE -DCAF=1
+                             -DMINI_TASK_EXP=10 -DMAX_ON_THE_FLY=32
+                             -DNUM_SLAVES=1 -DCAF_PREPUSH=1)
+  target_compile_definitions(bitonic_caf_3S_Exp10F32 PRIVATE -DCAF=1
+                             -DMINI_TASK_EXP=10 -DMAX_ON_THE_FLY=32
+                             -DNUM_SLAVES=3 -DCAF_PREPUSH=1)
+  target_compile_definitions(bitonic_caf_7S_Exp10F32 PRIVATE -DCAF=1
+                             -DMINI_TASK_EXP=10 -DMAX_ON_THE_FLY=32
+                             -DNUM_SLAVES=7 -DCAF_PREPUSH=1)
+  target_compile_definitions(bitonic_caf_15S_Exp10F32 PRIVATE -DCAF=1
+                             -DMINI_TASK_EXP=10 -DMAX_ON_THE_FLY=32
+                             -DNUM_SLAVES=15 -DCAF_PREPUSH=1)
+  add_custom_target(bitonic_caf)
+  add_dependencies(bitonic_caf
+                   bitonic_caf_1S_Exp10F32
+                   bitonic_caf_3S_Exp10F32
+                   bitonic_caf_7S_Exp10F32
+                   bitonic_caf_15S_Exp10F32)
 endif()

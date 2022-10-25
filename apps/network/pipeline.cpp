@@ -644,9 +644,9 @@ int main(int argc, char *argv[]) {
   // add allocated memory blocks into pool
   for (int i = 0; POOL_SIZE > i;) {
     size_t j = 0;
-    while (BULK_SIZE > j && POOL_SIZE > i) {
-      pkts[j] = (Packet*)((uint64_t)headerpool + (i * HEADER_SIZE));
-      pkts[j]->payload = (void*)((uint64_t)mempool + (i << 11));
+    while (BULK_SIZE > j && POOL_SIZE > (i + j)) {
+      pkts[j] = (Packet*)((uint64_t)headerpool + ((i + j) * HEADER_SIZE));
+      pkts[j]->payload = (void*)((uint64_t)mempool + ((i + j) << 11));
       j++;
     }
 #ifdef VL
@@ -704,6 +704,7 @@ int main(int argc, char *argv[]) {
         do {
           j += caf_push_bulk(&prod, (uint64_t*)&pkts[j], cnt2send - j);
         } while (j < cnt2send);
+        cnt2send *= sizeof(Packet*);
 #elif ZMQ
         assert((int64_t)cnt2send == zmq_send(prod, pkts, cnt2send, 0));
 #elif BLFQ

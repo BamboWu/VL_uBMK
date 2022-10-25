@@ -605,7 +605,7 @@ int main(int argc, char *argv[]) {
   // add allocated memory blocks into pool
   for (int i = 0; POOL_SIZE > i;) {
     size_t j = 0;
-    while (BULK_SIZE > j && POOL_SIZE > i) {
+    while (BULK_SIZE > j && POOL_SIZE > (i + j)) {
       pkts[j] = (Packet*)((uint64_t)headerpool + ((i + j) * HEADER_SIZE));
       pkts[j]->payload = (void*)((uint64_t)mempool + ((i + j) << 11));
       pkts[j]->ipheader.data.srcIP = (uint16_t)i;

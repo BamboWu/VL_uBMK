@@ -41,7 +41,7 @@ find_path( UT_INCLUDE
 
 if( UT_BASE_LIBRARY AND UT_RUNTIME_LIBRARY AND UT_RT_LIBRARY AND UT_INCLUDE )
     set( UT_FOUND TRUE )
-    message( STATUS "Using libut threading library" ) 
+    message( STATUS "Found libut threading library" )
     message( STATUS "LIBRARY: ${UT_RT_LIBRARY} ${UT_RUNTIME_LIBRARY} ${UT_BASE_LIBRARY}" ) 
     message( STATUS "INCLUDE: ${UT_INCLUDE}" ) 
 else( UT_BASE_LIBRARY AND UT_RUNTIME_LIBRARY AND UT_RT_LIBRARY AND UT_INCLUDE )

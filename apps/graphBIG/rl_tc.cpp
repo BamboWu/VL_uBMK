@@ -337,14 +337,21 @@ size_t parallel_triangle_count(graph_t& g, unsigned threadnum, vector<unsigned>&
     raft::map m;
 
     m += workset_k <= tc_k >= reduce_k;
-    //for (unsigned i = 0; threadnum > i; i++ )
-    //{
-    //    m += workset_k[std::to_string(i)] >> 
-    //        raft::kernel_wrapper::make<tc_kernel>(g) >>
-    //        reduce_k[std::to_string(i)];
-    //}
 
-    m.exe();
+    m.exe< partition_dummy,
+#if USE_UT or USE_QTHREAD
+        pool_schedule,
+#else
+        simple_schedule,
+#endif
+#ifdef VL
+        vlalloc,
+#elif STDALLOC
+        stdalloc,
+#else
+        dynalloc,
+#endif
+        no_parallel >();
 
     for (size_t vid = 0; g.num_vertices() > vid; ++vid) {
         cnts[vid] /= 2;

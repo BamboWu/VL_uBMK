@@ -1877,12 +1877,12 @@ void AdvanceFrameMT(int threadnum)
   // Map construction
   for (auto i = 0; i < threadnum; i++)
   {
-    m += simpleProducer[std::to_string(i)] >> *(clearParticlesMTWorkers[i]);
+    m += simpleProducer[std::to_string(i)] >> raft::order::in >> clearParticlesMTWorkers[i];
     std::cout << "simpleProducer >> clearParticlesMTWorkers";
     m += *(clearParticlesMTWorkers[i]) >> simpleAccum1[std::to_string(i)];
     std::cout << " >> simpleAccum1";
     #ifdef USE_MUTEX
-    m += simpleAccum1[std::to_string(i)] >> *(rebuildGridMTWorkers[i]);
+    m += simpleAccum1[std::to_string(i)] >> raft::order::in >> rebuildGridMTWorkers[i];
     std::cout << " >> rebuildGridMTWorkers";
     m += *(rebuildGridMTWorkers[i]) >> simpleAccumRebuild[std::to_string(i)];
     std::cout << " >> simpleAccumRebuild";
@@ -1899,38 +1899,38 @@ void AdvanceFrameMT(int threadnum)
     std::cout << " >> rebuildGridMTWorker1s";
     m += (*(rebuildGridMTWorker1s[i]))["output_continue"] >> cellModificationKernel[std::to_string(i)];
     std::cout << " >> cellModificationKernel";
-    m += cellModificationKernel[std::to_string(i)] >> *(rebuildGridMTWorker2s[i]);
+    m += cellModificationKernel[std::to_string(i)] >> rebuildGridMTWorker2s[i];
     std::cout << " >> rebuildGridMTWorker2s";
     #endif
-    m += simpleAccumRebuild[std::to_string(i)] >> *(initDensitiesAndForcesMTWorkers[i]);
+    m += simpleAccumRebuild[std::to_string(i)] >> raft::order::in >> initDensitiesAndForcesMTWorkers[i];
     std::cout << " >> initDensitiesAndForcesMTWorkers";
     m += *(initDensitiesAndForcesMTWorkers[i]) >> simpleAccum2[std::to_string(i)];
     std::cout << " >> simpleAccum2";
-    m += simpleAccum2[std::to_string(i)] >> *(computeDensitiesMTWorkers[i]);
+    m += simpleAccum2[std::to_string(i)] >> raft::order::in >> computeDensitiesMTWorkers[i];
     std::cout << " >> computeDensitiesMTWorkers";
-    m += (*(computeDensitiesMTWorkers[i]))["output_tid"] >> advancedAccum2[std::to_string(i)];
+    m += (*(computeDensitiesMTWorkers[i]))["output_tid"] >> raft::order::in >> advancedAccum2[std::to_string(i)];
     std::cout << " >> advancedAccum2";
-    m += (*(computeDensitiesMTWorkers[i]))["output_density"] >> densityModificationKernel[std::to_string(i)];
+    m += (*(computeDensitiesMTWorkers[i]))["output_density"] >> raft::order::in >> densityModificationKernel[std::to_string(i)];
     std::cout << " >> densityModificatoinKernel";
-    m += advancedAccum2[std::to_string(i)] >> *(computeDensities2MTWorkers[i]);
+    m += advancedAccum2[std::to_string(i)] >> raft::order::in >> computeDensities2MTWorkers[i];
     std::cout << " >> computeDensities2MTWorkers";
     m += *(computeDensities2MTWorkers[i]) >> simpleAccum3[std::to_string(i)];
     std::cout << " >> simpleAccum3";
-    m += simpleAccum3[std::to_string(i)] >> *(computeForcesMTWorkers[i]);
+    m += simpleAccum3[std::to_string(i)] >> raft::order::in >> computeForcesMTWorkers[i];
     std::cout << " >> computeForcesMTWorkers";
-    m += (*(computeForcesMTWorkers[i]))["output_tid"] >> advancedAccum3[std::to_string(i)];
+    m += (*(computeForcesMTWorkers[i]))["output_tid"] >> raft::order::in >> advancedAccum3[std::to_string(i)];
     std::cout << " >> adancedAccum3";
-    m += (*(computeForcesMTWorkers[i]))["output_acceleration"] >> accelerationModificationKernel[std::to_string(i)];
+    m += (*(computeForcesMTWorkers[i]))["output_acceleration"] >> raft::order::in >> accelerationModificationKernel[std::to_string(i)];
     std::cout << " >> accelerationModificationKernel";
-    m += advancedAccum3[std::to_string(i)] >> *(processCollisionsMTWorkers[i]);
+    m += advancedAccum3[std::to_string(i)] >> raft::order::in >> processCollisionsMTWorkers[i];
     std::cout << " >> processCollisionsMTWorkers";
     m += *(processCollisionsMTWorkers[i]) >> simpleAccum4[std::to_string(i)];
     std::cout << " >> simpleAccum4";
-    m += simpleAccum4[std::to_string(i)] >> *(advanceParticlesMTWorkers[i]);
+    m += simpleAccum4[std::to_string(i)] >> raft::order::in >> advanceParticlesMTWorkers[i];
     std::cout << " >> advanceParticlesMTWorkers";
     m += *(advanceParticlesMTWorkers[i]) >> simpleAccum5[std::to_string(i)];
     std::cout << " >> simpleAccum5";
-    m += simpleAccum5[std::to_string(i)] >> *(processCollisions2MTWorkers[i]);
+    m += simpleAccum5[std::to_string(i)] >> raft::order::in >> processCollisions2MTWorkers[i];
     std::cout << " >> processCollisions2MTWorkers";
     m += *(processCollisions2MTWorkers[i]) >> simpleConsumer[std::to_string(i)];
     std::cout << " >> simpleConsumer";
@@ -1943,9 +1943,7 @@ void AdvanceFrameMT(int threadnum)
   const auto beg( high_resolution_clock::now() );
 
   m.exe< partition_dummy,
-#if USEUT
-      ut_schedule,
-#elif USEQTHREAD
+#if USE_UT || USE_QTHREAD
       pool_schedule,
 #else
       simple_schedule,

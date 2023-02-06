@@ -142,41 +142,44 @@ void streamCluster_raftlib(PStream* stream, long kmin, long kmax, int dim,
 
   raft::map m;
 
-  m += dummy_source >> master["from_source"];
-  m += master["to_search"] >> search["from_master"];
-  m += search["to_contcenters"] >> contCenters >> copyCenters >>
-      master["from_copycenters"];
-  m += master["to_sink"] >> dummy_sink;
+  m += dummy_source >> master["to_search"]["from_source"] >>
+      search["to_contcenters"]["from_master"] >> contCenters >> copyCenters >>
+      master["to_sink"]["from_copycenters"] >> dummy_sink;
 
-  m += search["to_pkmedian"] >> pkmedianInit["from_search"];
-  m += pkmedianInit["to_pspeedy"] >> pkmedianPSpeedyLoop["from_init"];
-  m += pkmedianPSpeedyLoop["to_selectfeasible"] >> selectFeasible >>
-      pkmedianPFLLoop["from_selectfeasible"];
-  m += pkmedianPFLLoop["to_search"] >> search["from_pkmedian"];
+  m += search["to_pkmedian"] >> raft::order::in >>
+      pkmedianInit["to_pspeedy"]["from_search"] >>
+      pkmedianPSpeedyLoop["to_selectfeasible"]["from_init"] >>
+      selectFeasible >> pkmedianPFLLoop["to_search"]["from_selectfeasible"] >>
+      search["from_pkmedian"];
 
-  m += pkmedianPSpeedyLoop["to_pspeedy"] >> pspeedy["from_pkmedian"];
-  m += pspeedy["to_pkmedian"] >> pkmedianPSpeedyLoop["from_pspeedy"];
+  m += pkmedianPSpeedyLoop["to_pspeedy"] >> raft::order::in >>
+      pspeedy["to_pkmedian"]["from_pkmedian"] >>
+      pkmedianPSpeedyLoop["from_pspeedy"];
 
-  m += pkmedianPFLLoop["to_pFL"] >> pFL["from_pkmedian"];
-  m += pFL["to_pgain"] >> pgain["from_pFL"];
-  m += pgain["to_pFL"] >> pFL["from_pgain"];
-  m += pFL["to_pkmedian"] >> pkmedianPFLLoop["from_pFL"];
+  m += pkmedianPFLLoop["to_pFL"] >> raft::order::in >>
+      pFL["to_pgain"]["from_pkmedian"] >> pgain["to_pFL"]["from_pFL"] >>
+      pFL["to_pkmedian"]["from_pgain"] >> pkmedianPFLLoop["from_pFL"];
 
 
   // to multi-instance workers
-  m += pkmedianInit["to_worker"] >> costTo0 >>
+  m += pkmedianInit["to_worker"] >> raft::order::in >> costTo0 >>
       pkmedianInit["from_worker"];
-  m += pspeedy["to_centerTo0"] >> centerTo0 >>
+  m += pspeedy["to_centerTo0"] >> raft::order::in >> centerTo0 >>
       pspeedy["from_centerTo0"];
-  m += pspeedy["to_centerUpdate"] >> centerUpdate >>
+  m += pspeedy["to_centerUpdate"] >> raft::order::in >> centerUpdate >>
       pspeedy["from_centerUpdate"];
-  m += pspeedy["to_costSumup"] >> costSumup >> pspeedy["from_costSumup"];
-  m += pgain["to_centerCount"] >> centerCount >> pgain["from_centerCount"];
-  m += pgain["to_centerOffset"] >> centerOffset >> pgain["from_centerOffset"];
-  m += pgain["to_switchCostCalc"] >> switchCostCalc >>
+  m += pspeedy["to_costSumup"] >> raft::order::in >> costSumup >>
+      pspeedy["from_costSumup"];
+  m += pgain["to_centerCount"] >> raft::order::in >> centerCount >>
+      pgain["from_centerCount"];
+  m += pgain["to_centerOffset"] >> raft::order::in >> centerOffset >>
+      pgain["from_centerOffset"];
+  m += pgain["to_switchCostCalc"] >> raft::order::in >> switchCostCalc >>
       pgain["from_switchCostCalc"];
-  m += pgain["to_lowerSumup"] >> lowerSumup >> pgain["from_lowerSumup"];
-  m += pgain["to_commitSwitch"] >> commitSwitch >> pgain["from_commitSwitch"];
+  m += pgain["to_lowerSumup"] >> raft::order::in >> lowerSumup >>
+      pgain["from_lowerSumup"];
+  m += pgain["to_commitSwitch"] >> raft::order::in >> commitSwitch >>
+      pgain["from_commitSwitch"];
 
   // Execute the map
 
@@ -184,9 +187,7 @@ void streamCluster_raftlib(PStream* stream, long kmin, long kmax, int dim,
   const auto beg( high_resolution_clock::now() );
 
   m.exe< partition_dummy,
-#if USEUT
-        ut_schedule,
-#elif USEQTHREAD
+#if USE_UT || USE_QTHREAD
         pool_schedule,
 #else
         simple_schedule,

@@ -114,17 +114,15 @@ main( int argc, char **argv )
     print p( kernel_count );
     for( auto i( 0 ); i < kernel_count; i++ )
     {
-        m += read[ std::to_string( i ) ] >> 
-                raft::kernel_wrapper::make< search >( term ) >> p[ std::to_string( i ) ];
+        m += read[ std::to_string( i ) ] >> raft::order::in >>
+                raft::kernel_maker< search >( term ) >> p[ std::to_string( i ) ];
     }
 
     const uint64_t beg_tsc = rdtsc();
     const auto beg( high_resolution_clock::now() );
 
     m.exe< partition_dummy,
-#if USEUT
-        ut_schedule,
-#elif USEQTHREAD
+#if USE_UT or USE_QTHREAD
         pool_schedule,
 #else
         simple_schedule,

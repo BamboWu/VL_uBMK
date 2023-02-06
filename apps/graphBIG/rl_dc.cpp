@@ -171,7 +171,20 @@ void parallel_dc(graph_t& g, unsigned threadnum, gBenchPerf_multi & perf, int pe
 
     m += workset_k <= dc_k >= reduce_k;
 
-    m.exe();
+    m.exe< partition_dummy,
+#if USE_UT or USE_QTHREAD
+        pool_schedule,
+#else
+        simple_schedule,
+#endif
+#ifdef VL
+        vlalloc,
+#elif STDALLOC
+        stdalloc,
+#else
+        dynalloc,
+#endif
+        no_parallel >();
 
     for (unsigned i = 0; threadnum > i; ++i) {
         perf.stop(i, perf_group);

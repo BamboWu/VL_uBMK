@@ -155,7 +155,20 @@ inline void _2DParallelJacobi::operator()(_2DPoissonEquation *eq)
 
         m += workset_k <= jacobi_k >= reduce_k;
 
-        m.exe();
+        m.exe< partition_dummy,
+#if USE_UT or USE_QTHREAD
+            pool_schedule,
+#else
+            simple_schedule,
+#endif
+#ifdef VL
+            vlalloc,
+#elif STDALLOC
+            stdalloc,
+#else
+            dynalloc,
+#endif
+            no_parallel >();
 
 		Error = sqrt(Error) / sqrt(_n * _m);
 
@@ -163,5 +176,6 @@ inline void _2DParallelJacobi::operator()(_2DPoissonEquation *eq)
 	}
 
 	grid->setError(Error);
+	grid->U = _unew;
 	free(_uold);
 }

@@ -50,8 +50,9 @@ _2DPoissonEquation::_2DPoissonEquation(_2DGrid *grid,
 	U = grid;
 	G = g;
 
-	assert(0 == posix_memalign((void **)&F, ALIGNMENT,
+	const auto res(posix_memalign((void **)&F, ALIGNMENT,
                 (grid->getXlen() * grid->getYlen()) * sizeof(double)));
+	assert(0 == res);
 
 	for (int i = 0; i < grid->getXlen() * grid->getYlen(); i++)
 		F[i] = 0.0;
@@ -68,8 +69,9 @@ _2DPoissonEquation::_2DPoissonEquation(_2DGrid *grid,
 	U = grid;
 	G = g;
 	E = e;
-	assert(0 == posix_memalign((void **)&F, ALIGNMENT,
+	const auto res(posix_memalign((void **)&F, ALIGNMENT,
                 (grid->getXlen() * grid->getYlen()) * sizeof(double)));
+	assert(0 == res);
 
 	(*G)(U);
 

@@ -54,6 +54,19 @@ typedef graph_t::edge_iterator      edge_iterator;
 
 //====================RaftLib Structures========================//
 size_t get_intersect_cnt(vector<size_t>& setA, vector<size_t>& setB);
+struct intersect_msg
+{
+    size_t src;
+    size_t dst;
+    vector<size_t> *src_set;
+    vector<size_t> *dst_set;
+    intersect_msg() = default;
+    intersect_msg(const intersect_msg& rhs) : src(rhs.src), dst(rhs.dst),
+        src_set(rhs.src_set), dst_set(rhs.dst_set) {}
+    intersect_msg(size_t s, size_t d, vector<size_t>& sset,
+            vector<size_t>& dset) :
+        src(s), dst(d), src_set(&sset), dst_set(&dset) {}
+};
 struct reduction_msg
 {
     size_t src; // src vertex
@@ -84,18 +97,42 @@ public:
     int16_t* pcnts;
 };
 
-class tc_kernel : public raft::kernel
+class count_kernel : public raft::kernel
 {
 public:
-    tc_kernel(graph_t& g) : raft::kernel(), g_(g) {
-        input.addPort<vertex_iterator>("input");
+    count_kernel() : raft::kernel() {
+        input.addPort<struct intersect_msg>("input");
         output.addPort<struct reduction_msg>("output");
     }
-    tc_kernel(const tc_kernel& other) : raft::kernel(), g_(other.g_) {
-        input.addPort<vertex_iterator>("input");
+    count_kernel(const count_kernel& other) : raft::kernel() {
+        input.addPort<struct intersect_msg>("input");
         output.addPort<struct reduction_msg>("output");
     }
-    ~tc_kernel() = default;
+    ~count_kernel() = default;
+    virtual raft::kstatus run() {
+        // run triangle count now
+        struct intersect_msg& msg(input["input"].peek<intersect_msg>());
+        int16_t cnt = get_intersect_cnt(*msg.src_set, *msg.dst_set);
+        output["output"].template push<struct reduction_msg>(
+                {msg.src, msg.dst, cnt});
+        input["input"].recycle();
+        return raft::proceed;
+    }
+    CLONE(); // enable cloning
+};
+
+class lookup_kernel : public raft::kernel
+{
+public:
+    lookup_kernel(graph_t& g) : raft::kernel(), g_(g) {
+        input.addPort<vertex_iterator>("input");
+        output.addPort<struct intersect_msg>("output");
+    }
+    lookup_kernel(const lookup_kernel& other) : raft::kernel(), g_(other.g_) {
+        input.addPort<vertex_iterator>("input");
+        output.addPort<struct intersect_msg>("output");
+    }
+    ~lookup_kernel() = default;
     virtual raft::kstatus run() {
         // run triangle count now
         vertex_iterator& vit(input["input"].peek<vertex_iterator>());
@@ -108,9 +145,8 @@ public:
             vertex_iterator vit_targ = g_.find_vertex(eit->target());
 
             vector<uint64_t> & dest_set = vit_targ->property().neighbor_set;
-            int16_t cnt = get_intersect_cnt(src_set, dest_set);
-            output["output"].template push<struct reduction_msg>(
-                    {vit->id(), vit_targ->id(), cnt});
+            output["output"].template push<struct intersect_msg>(
+                    {vit->id(), vit_targ->id(), src_set, dest_set});
         }
         input["input"].recycle();
         return raft::proceed;
@@ -332,11 +368,12 @@ size_t parallel_triangle_count(graph_t& g, unsigned threadnum, vector<unsigned>&
 
     workset_kernel workset_k(g, threadnum);
     reduce_kernel reduce_k(cnts, threadnum);
-    tc_kernel tc_k(g);
+    lookup_kernel lookup_k(g);
+    count_kernel count_k;
 
     raft::map m;
 
-    m += workset_k <= tc_k >= reduce_k;
+    m += workset_k <= lookup_k >> count_k >= reduce_k;
 
     m.exe< partition_dummy,
 #if USE_UT or USE_QTHREAD

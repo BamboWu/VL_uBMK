@@ -1,0 +1,36 @@
+{
+    "csvs": [
+        [2, "armq_trace.example.0002.log"],
+        [4, "armq_trace.example.0004.log"],
+        [5, "armq_trace.example.0005.log"],
+        [6, "armq_trace.example.0006.log"]
+    ],
+    "pc_map": {
+        "0xffffb7f11230": "spawn",
+        "0xffffb7f14018": "jmp",
+        "0xffffb7f2404c": "jd",
+        "0xffffb7f10e04": "yield",
+        "0xffffb7efe1a8": "peeked",
+        "0xffffb7efe218": "processed",
+        "0xffffb7efe2dc": "pushing",
+        "0xffffb7efe340": "pushed"
+    },
+    "task_map": {
+        "1000000091a8": 16,
+        "1000000092e8": 14,
+        "100000009428": 15,
+        "100000009568": 10,
+        "1000000096a8": 1,
+        "1000000097e8": 3,
+        "100000009928": 4,
+        "100000009a68": 2,
+        "100000009ba8": 7,
+        "100000009ce8": 5,
+        "100000009e28": 6,
+        "10000000a068": 8,
+        "10000000a1a8": 9,
+        "10000000a2e8": 11,
+        "10000000a428": 12,
+        "10000000a568": 13
+    }
+}

@@ -15,5 +15,11 @@ IF(PkgConfig_FOUND)
 ENDIF()
 
 IF(RaftLib_FOUND)
+  IF(QTHREAD_FOUND)
+      # cmake/FindQthread.cmake set QTHREAD_FOUND only when libqthread.a
+      # is found, and set QTHREAD_LIBRARIES, which statically links to
+      # libqthread.a so should get the priority before RaftLib's LDFLAGS
+      SET(RaftLib_LDFLAGS ${QTHREAD_LIBRARIES} ${RaftLib_LDFLAGS})
+  ENDIF()
   MESSAGE(STATUS "Found raft: inc=${RaftLib_INCLUDE_DIRS}, lib=${RaftLib_LDFLAGS}")
 ENDIF()

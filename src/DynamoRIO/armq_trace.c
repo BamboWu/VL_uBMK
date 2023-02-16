@@ -51,8 +51,10 @@
  * This client is a simple implementation of an instruction tracing tool
  * without instrumentation optimization.  It also uses simple absolute PC
  * values and does not separate them into library offsets.
- * Additionally, dumping as text is much slower than dumping as
- * binary.  See instrace_x86.c for a higher-performance sample.
+ *
+ * The OUTPUT_TEXT define controls the format of the trace: text or binary.
+ * Creating a text trace file makes the tool an order of magnitude (!) slower
+ * than creating a binary file; thush, the default is binary.
  */
 
 #include <stdio.h>
@@ -62,6 +64,8 @@
 #include "drreg.h"
 #include "drutil.h"
 #include "utils.h"
+
+//#define OUTPUT_TEXT
 
 #define HASH_SET_SIZE 65537
 #define NSLOTS 2
@@ -90,12 +94,12 @@ typedef struct {
     ins_ref_t *buf_base;
     file_t log;
     FILE *logf;
-    uint64 num_refs;
+    //uint64 num_refs;
 } per_thread_t;
 
 static client_id_t client_id;
-static void *mutex;     /* for multithread support */
-static uint64 num_refs; /* keep a global instruction reference count */
+//static void *mutex;     /* for multithread support */
+//static uint64 num_refs; /* keep a global instruction reference count */
 
 /* Allocated TLS slot offsets */
 enum {
@@ -120,9 +124,10 @@ instrace(void *drcontext)
     data = drmgr_get_tls_field(drcontext, tls_idx);
     buf_ptr = BUF_PTR(data->seg_base);
     /* Example of dumped file content:
-     *   0x7f59c2d002d3: call
-     *   0x7ffeacab0ec8: mov
+     *   0x7f59c2d002d3,call,0
+     *   0x7ffeacab0ec8,mov,ffffff00
      */
+#ifdef OUTPUT_TEXT
     /* We use libc's fprintf as it is buffered and much faster than dr_fprintf
      * for repeated printing that dominates performance, as the printing does here.
      */
@@ -130,8 +135,14 @@ instrace(void *drcontext)
         /* We use PIFX to avoid leading zeroes and shrink the resulting file. */
         fprintf(data->logf, PIFX ",%lu,%lx\n", (ptr_uint_t)ins_ref->pc,
                 ins_ref->tsc, ins_ref->val);
-        data->num_refs++;
+        //data->num_refs++;
     }
+#else
+    //dr_write_file(data->log, (char*)data->buf_base,
+    //              (size_t)((char*)buf_ptr - (char*)data->buf_base));
+    fwrite((void*)data->buf_base,
+           (size_t)((char*)buf_ptr - (char*)data->buf_base), 1, data->logf);
+#endif
     BUF_PTR(data->seg_base) = data->buf_base;
 }
 
@@ -175,7 +186,17 @@ insert_save_addr(void *drcontext, instrlist_t *ilist, instr_t *where, reg_id_t b
 }
 
 static void
-insert_save_val(void *drcontext, instrlist_t *ilist, instr_t *where, reg_id_t base,
+insert_save_dst(void *drcontext, instrlist_t *ilist, instr_t *where, reg_id_t base,
+                reg_id_t scratch, opnd_t oprand)
+{
+    NINSERT(ilist, where,
+            XINST_CREATE_store(
+                drcontext, OPND_CREATE_MEM64(base, offsetof(ins_ref_t, val)),
+                oprand));
+}
+
+static void
+insert_save_src(void *drcontext, instrlist_t *ilist, instr_t *where, reg_id_t base,
                 reg_id_t scratch, opnd_t oprand)
 {
     if (opnd_uses_reg(oprand, scratch) &&
@@ -273,7 +294,16 @@ instrument_instr(void *drcontext, instrlist_t *ilist, instr_t *where)
     insert_save_pc(drcontext, ilist, where, reg_ptr, reg_tmp, instr_get_app_pc(where));
     insert_save_tsc(drcontext, ilist, where, reg_ptr, reg_tmp);
     //printf("%lx %s has %d srcs oprands\n", pc, decode_opcode_name(instr_get_opcode(where)), instr_num_srcs(where));
-    if (reg_idx < instr_num_srcs(where)) {
+    if (0 > reg_idx && -reg_idx <= instr_num_dsts(where)) {
+        opnd_t oprand = instr_get_dst(where, -1 - reg_idx);
+        if (opnd_is_memory_reference(oprand)) {
+            //insert_load_buf_ptr(drcontext, ilist, where, reg_ptr);
+            insert_save_addr(drcontext, ilist, where, reg_ptr, reg_tmp, oprand);
+        } else {
+            //insert_load_buf_ptr(drcontext, ilist, where, reg_ptr);
+            insert_save_dst(drcontext, ilist, where, reg_ptr, reg_tmp, oprand);
+        }
+    } else if (reg_idx < instr_num_srcs(where)) {
         //if (opnd_uses_reg(instr_get_src(where, reg_idx), reg_ptr)) {
         //    printf("conflict with reg_ptr\n");
         //} else if (opnd_uses_reg(instr_get_src(where, reg_idx), reg_tmp)) {
@@ -285,7 +315,7 @@ instrument_instr(void *drcontext, instrlist_t *ilist, instr_t *where)
             insert_save_addr(drcontext, ilist, where, reg_ptr, reg_tmp, oprand);
         } else {
             //insert_load_buf_ptr(drcontext, ilist, where, reg_ptr);
-            insert_save_val(drcontext, ilist, where, reg_ptr, reg_tmp, oprand);
+            insert_save_src(drcontext, ilist, where, reg_ptr, reg_tmp, oprand);
         }
     }
     //insert_save_opcode(drcontext, ilist, where, reg_ptr, reg_tmp,
@@ -344,11 +374,12 @@ event_thread_init(void *drcontext)
     data->seg_base = dr_get_dr_segment_base(tls_seg);
     data->buf_base =
         dr_raw_mem_alloc(MEM_BUF_SIZE, DR_MEMPROT_READ | DR_MEMPROT_WRITE, NULL);
+    //data->buf_base = dr_thread_alloc(drcontext, MEM_BUF_SIZE);
     DR_ASSERT(data->seg_base != NULL && data->buf_base != NULL);
     /* put buf_base to TLS as starting buf_ptr */
     BUF_PTR(data->seg_base) = data->buf_base;
 
-    data->num_refs = 0;
+    //data->num_refs = 0;
 
     /* We're going to dump our data to a per-thread file.
      * On Windows we need an absolute path so we place it in
@@ -362,7 +393,9 @@ event_thread_init(void *drcontext)
 #endif
                           DR_FILE_ALLOW_LARGE);
     data->logf = log_stream_from_file(data->log);
+#ifdef OUTPUT_TEXT
     fprintf(data->logf, "pc,tsc,val\n");
+#endif
 }
 
 static void
@@ -371,18 +404,20 @@ event_thread_exit(void *drcontext)
     per_thread_t *data;
     instrace(drcontext); /* dump any remaining buffer entries */
     data = drmgr_get_tls_field(drcontext, tls_idx);
-    dr_mutex_lock(mutex);
-    num_refs += data->num_refs;
-    dr_mutex_unlock(mutex);
+    //dr_mutex_lock(mutex);
+    //num_refs += data->num_refs;
+    //dr_mutex_unlock(mutex);
     log_stream_close(data->logf); /* closes fd too */
     dr_raw_mem_free(data->buf_base, MEM_BUF_SIZE);
+    //dr_thread_free(drcontext, data->buf_base, MEM_BUF_SIZE);
     dr_thread_free(drcontext, data, sizeof(per_thread_t));
 }
 
 static void
 event_exit(void)
 {
-    dr_log(NULL, DR_LOG_ALL, 1, "Client 'instrace' num refs seen: " SZFMT "\n", num_refs);
+    //dr_log(NULL, DR_LOG_ALL, 1, "Client 'instrace' num refs seen: " SZFMT "\n", num_refs);
+    dr_log(NULL, DR_LOG_ALL, 1, "done\n");
     if (!dr_raw_tls_cfree(tls_offs, INSTRACE_TLS_COUNT))
         DR_ASSERT(false);
 
@@ -393,7 +428,7 @@ event_exit(void)
         drreg_exit() != DRREG_SUCCESS)
         DR_ASSERT(false);
 
-    dr_mutex_destroy(mutex);
+    //dr_mutex_destroy(mutex);
     drmgr_exit();
 }
 
@@ -430,7 +465,7 @@ dr_client_main(client_id_t id, int argc, const char *argv[])
         DR_ASSERT(false);
 
     client_id = id;
-    mutex = dr_mutex_create();
+    //mutex = dr_mutex_create();
 
     tls_idx = drmgr_register_tls_field();
     DR_ASSERT(tls_idx != -1);

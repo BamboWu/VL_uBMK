@@ -100,6 +100,7 @@ typedef struct {
 static client_id_t client_id;
 //static void *mutex;     /* for multithread support */
 //static uint64 num_refs; /* keep a global instruction reference count */
+static app_pc exe_start;
 
 /* Allocated TLS slot offsets */
 enum {
@@ -277,12 +278,13 @@ instrument_instr(void *drcontext, instrlist_t *ilist, instr_t *where)
     }
 
     u_int64_t pc = (u_int64_t) instr_get_app_pc(where);
-    u_int64_t base_addr = (u_int64_t) (dr_lookup_module((byte *)pc)->start);
-    u_int64_t pc_hash = PC_HASH(pc - base_addr);
+    //u_int64_t base_addr = (u_int64_t) (dr_lookup_module((byte *)pc)->start);
+    //u_int64_t pc_hash = PC_HASH(pc - base_addr);
+    u_int64_t pc_hash = PC_HASH(pc - (u_int64_t)exe_start);
     bool hit_roi = false;
     int reg_idx;
     for (int idx = 0; NSLOTS > idx; ++idx) {
-        if (pc = pc_roi[pc_hash][idx]) {
+        if ((pc - (u_int64_t)exe_start) == pc_roi[pc_hash][idx]) {
             hit_roi = true;
             reg_idx = reg_roi[pc_hash][idx];
             break;
@@ -329,6 +331,46 @@ instrument_instr(void *drcontext, instrlist_t *ilist, instr_t *where)
         DR_ASSERT(false);
 }
 
+static dr_emit_flags_t
+event_bb_analysis(void *drcontext, void *tag, instrlist_t *bb, bool for_trace,
+                  bool translating, void **user_data)
+{
+    /* Only app BBs */
+    if (true) {
+        module_data_t *mod = dr_lookup_module(dr_fragment_app_pc(tag));
+        if (NULL != mod) {
+            bool from_exe = (mod->start == exe_start);
+            dr_free_module_data(mod);
+            if (!from_exe) {
+                *user_data = NULL;
+                return DR_EMIT_DEFAULT;
+            }
+        }
+    }
+
+    bool hit_roi = false;
+
+    u_int64_t pc_beg = (u_int64_t) instr_get_app_pc(instrlist_first(bb));
+    u_int64_t pc_end = (u_int64_t) instr_get_app_pc(instrlist_last(bb));
+    /* TODO: do not hardcode instruction length to be 4 words */
+    for (u_int64_t pc = pc_beg; pc_end >= pc; pc += 4) {
+        u_int64_t pc_hash = PC_HASH(pc - (u_int64_t)exe_start);
+        for (int idx = 0; NSLOTS > idx; ++idx) {
+            if ((pc - (u_int64_t)exe_start) == pc_roi[pc_hash][idx]) {
+                hit_roi = true;
+                break;
+            }
+        }
+    }
+
+    if (!hit_roi) {
+        *user_data = NULL;
+    } else {
+        *user_data = (void *)1;
+    }
+    return DR_EMIT_DEFAULT;
+}
+
 /* For each app instr, we insert inline code to fill the buffer. */
 static dr_emit_flags_t
 event_app_instruction(void *drcontext, void *tag, instrlist_t *bb, instr_t *instr,
@@ -337,8 +379,11 @@ event_app_instruction(void *drcontext, void *tag, instrlist_t *bb, instr_t *inst
     /* we don't want to auto-predicate any instrumentation */
     drmgr_disable_auto_predication(drcontext, bb);
 
-    if (!instr_is_app(instr))
+    if (NULL == user_data) {
         return DR_EMIT_DEFAULT;
+    }
+    //if (!instr_is_app(instr))
+    //    return DR_EMIT_DEFAULT;
 
     /* insert code to add an entry to the buffer */
     instrument_instr(drcontext, bb, instr);
@@ -424,7 +469,7 @@ event_exit(void)
     if (!drmgr_unregister_tls_field(tls_idx) ||
         !drmgr_unregister_thread_init_event(event_thread_init) ||
         !drmgr_unregister_thread_exit_event(event_thread_exit) ||
-        !drmgr_unregister_bb_insertion_event(event_app_instruction) ||
+        !drmgr_unregister_bb_instrumentation_event(event_bb_analysis) ||
         drreg_exit() != DRREG_SUCCESS)
         DR_ASSERT(false);
 
@@ -456,11 +501,20 @@ dr_client_main(client_id_t id, int argc, const char *argv[])
     if (!drmgr_init() || drreg_init(&ops) != DRREG_SUCCESS)
         DR_ASSERT(false);
 
+    /* Set main module address to filter BBs from lib modules */
+    if (true) {
+        module_data_t *exe = dr_get_main_module();
+        if (NULL != exe) {
+            exe_start = exe->start;
+        }
+        dr_free_module_data(exe);
+    }
+
     /* register events */
     dr_register_exit_event(event_exit);
     if (!drmgr_register_thread_init_event(event_thread_init) ||
         !drmgr_register_thread_exit_event(event_thread_exit) ||
-        !drmgr_register_bb_instrumentation_event(NULL /*analysis_func*/,
+        !drmgr_register_bb_instrumentation_event(event_bb_analysis,
                                                  event_app_instruction, NULL))
         DR_ASSERT(false);
 

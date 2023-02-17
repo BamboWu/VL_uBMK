@@ -262,6 +262,8 @@ def main(argv):
                 if -1 != last_tid and last_tid != evt["tid"]:
                     print("Warning: begin with {} but hit {}?".format(
                                                        last_tid, evt["tid"]))
+                if -1 == period_tid:
+                    period_tid = evt["tid"]
                 last_occupied = period_end
                 last_tid = -1
                 draw_block = True
@@ -319,7 +321,7 @@ def main(argv):
                 if last_cpu_id != evt["cpu"]:
                     print("Warning: T{} last on CPU {} but yield on CPU {}?".format(
                         task_id, last_cpu_id, evt["cpu"]))
-                last_on_cpu = evt["time"] - toffset
+                last_on_cpu = -1
                 if mq_state == "unknown":
                     continue;
                 voffset = cpu_lbl2voffset[evt["cpu"]] + mq_state2voffset[mq_state]

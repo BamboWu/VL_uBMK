@@ -324,7 +324,11 @@ def main(argv):
                 last_on_cpu = -1
                 if mq_state == "unknown":
                     continue;
-                voffset = cpu_lbl2voffset[evt["cpu"]] + mq_state2voffset[mq_state]
+                if evt["cpu"] in cpu_lbl2voffset.keys():
+                    voffset = cpu_lbl2voffset[evt["cpu"]] + \
+                            mq_state2voffset[mq_state]
+                else:
+                    voffset = 0
                 #hdl = plt.plot([period_beg, evt["time"]],
                 #               [voffset, voffset],
                 #               color=color_table[int(task_id) % len(color_table)],
@@ -342,14 +346,20 @@ def main(argv):
                     mq_state = "popping";
                 if mq_old_state == "unknown":
                     continue
-                voffset = cpu_lbl2voffset[evt["cpu"]] + mq_state2voffset[mq_old_state]
+                if evt["cpu"] in cpu_lbl2voffset.keys():
+                    voffset = cpu_lbl2voffset[evt["cpu"]] + \
+                            mq_state2voffset[mq_old_state]
+                else:
+                    voffset = 0
             else:
                 continue
 
             if roi and (evt["time"] - toffset) > arg_list.end:
                 break
             if roi and period_beg < arg_list.beg:
-                continue;
+                continue
+            if evt["cpu"] not in cpu_lbl2voffset.keys():
+                continue
             rect = patches.Rectangle((period_beg, # x0
                                       voffset-task_vspan/2), # y0
                                      evt["time"] - toffset - period_beg, # x1-x0

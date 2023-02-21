@@ -114,7 +114,7 @@ static int tls_idx;
 #define BUF_PTR(tls_base) *(ins_ref_t **)TLS_SLOT(tls_base, INSTRACE_TLS_OFFS_BUF_PTR)
 
 #define MINSERT instrlist_meta_preinsert
-#define NINSERT instrlist_meta_postinsert
+//#define NINSERT instrlist_meta_postinsert
 
 static void
 instrace(void *drcontext)
@@ -186,15 +186,15 @@ insert_save_addr(void *drcontext, instrlist_t *ilist, instr_t *where, reg_id_t b
                 opnd_create_reg(scratch)));
 }
 
-static void
-insert_save_dst(void *drcontext, instrlist_t *ilist, instr_t *where, reg_id_t base,
-                reg_id_t scratch, opnd_t oprand)
-{
-    NINSERT(ilist, where,
-            XINST_CREATE_store(
-                drcontext, OPND_CREATE_MEM64(base, offsetof(ins_ref_t, val)),
-                oprand));
-}
+//static void
+//insert_save_dst(void *drcontext, instrlist_t *ilist, instr_t *where, reg_id_t base,
+//                reg_id_t scratch, opnd_t oprand)
+//{
+//    NINSERT(ilist, where,
+//            XINST_CREATE_store(
+//                drcontext, OPND_CREATE_MEM64(base, offsetof(ins_ref_t, val)),
+//                oprand));
+//}
 
 static void
 insert_save_src(void *drcontext, instrlist_t *ilist, instr_t *where, reg_id_t base,
@@ -267,16 +267,6 @@ insert_save_pc(void *drcontext, instrlist_t *ilist, instr_t *where, reg_id_t bas
 static void
 instrument_instr(void *drcontext, instrlist_t *ilist, instr_t *where)
 {
-    /* We need two scratch registers */
-    reg_id_t reg_ptr, reg_tmp;
-    if (drreg_reserve_register(drcontext, ilist, where, NULL, &reg_ptr) !=
-            DRREG_SUCCESS ||
-        drreg_reserve_register(drcontext, ilist, where, NULL, &reg_tmp) !=
-            DRREG_SUCCESS) {
-        DR_ASSERT(false); /* cannot recover */
-        return;
-    }
-
     u_int64_t pc = (u_int64_t) instr_get_app_pc(where);
     //u_int64_t base_addr = (u_int64_t) (dr_lookup_module((byte *)pc)->start);
     //u_int64_t pc_hash = PC_HASH(pc - base_addr);
@@ -290,7 +280,20 @@ instrument_instr(void *drcontext, instrlist_t *ilist, instr_t *where)
             break;
         }
     }
-    if (hit_roi) {
+    if (!hit_roi) {
+        return;
+    }
+
+    /* We need two scratch registers */
+    reg_id_t reg_ptr, reg_tmp;
+    if (drreg_reserve_register(drcontext, ilist, where, NULL, &reg_ptr) !=
+            DRREG_SUCCESS ||
+        drreg_reserve_register(drcontext, ilist, where, NULL, &reg_tmp) !=
+            DRREG_SUCCESS) {
+        DR_ASSERT(false); /* cannot recover */
+        return;
+    }
+
     //printf("%lx - %lx = %lx: %s\n", pc, base_addr, decode_opcode_name(instr_get_opcode(where)));
     insert_load_buf_ptr(drcontext, ilist, where, reg_ptr);
     insert_save_pc(drcontext, ilist, where, reg_ptr, reg_tmp, instr_get_app_pc(where));
@@ -301,9 +304,9 @@ instrument_instr(void *drcontext, instrlist_t *ilist, instr_t *where)
         if (opnd_is_memory_reference(oprand)) {
             //insert_load_buf_ptr(drcontext, ilist, where, reg_ptr);
             insert_save_addr(drcontext, ilist, where, reg_ptr, reg_tmp, oprand);
-        } else {
-            //insert_load_buf_ptr(drcontext, ilist, where, reg_ptr);
-            insert_save_dst(drcontext, ilist, where, reg_ptr, reg_tmp, oprand);
+        //} else {
+        //    //insert_load_buf_ptr(drcontext, ilist, where, reg_ptr);
+        //    insert_save_dst(drcontext, ilist, where, reg_ptr, reg_tmp, oprand);
         }
     } else if (reg_idx < instr_num_srcs(where)) {
         //if (opnd_uses_reg(instr_get_src(where, reg_idx), reg_ptr)) {
@@ -323,7 +326,6 @@ instrument_instr(void *drcontext, instrlist_t *ilist, instr_t *where)
     //insert_save_opcode(drcontext, ilist, where, reg_ptr, reg_tmp,
     //                   instr_get_opcode(where));
     insert_update_buf_ptr(drcontext, ilist, where, reg_ptr, sizeof(ins_ref_t));
-    }
 
     /* Restore scratch registers */
     if (drreg_unreserve_register(drcontext, ilist, where, reg_ptr) != DRREG_SUCCESS ||

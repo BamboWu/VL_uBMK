@@ -2,8 +2,10 @@ project(VL_uBMK)
 
 cmake_minimum_required(VERSION 3.1)
 
-include_directories(${Boost_INCLUDE_DIRS})
-link_directories(${Boost_LIBRARY_DIRS})
+if(Boost_FOUND)
+  include_directories(${Boost_INCLUDE_DIRS})
+  link_directories(${Boost_LIBRARY_DIRS})
+endif()
 
 if(VL_FOUND)
   include_directories(${VL_INCLUDE_DIR})

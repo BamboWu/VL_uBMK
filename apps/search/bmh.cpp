@@ -164,7 +164,7 @@ main( int argc, char **argv )
 #else
     search s( term );
     print p;
-    dag += read >> s * kernel_count >> p;
+    dag += read >> s * kernel_count >> p * 0;
 #endif
 
     const uint64_t beg_tsc = rdtsc();
@@ -187,8 +187,12 @@ main( int argc, char **argv )
 #endif
              no_parallel
 #else // not( RAFTLIB_ORIG )
-#if ONESHOT
-             raft::RuntimeFIFOOneShot
+#if RAFTLIB_MIX
+             raft::RuntimeMix
+#elif RAFTLIB_ONESHOT
+             raft::RuntimeNewBurst
+#elif RAFTLIB_CV
+             raft::RuntimeFIFOCV
 #else
              raft::RuntimeFIFO
 #endif

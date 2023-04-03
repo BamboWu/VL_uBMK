@@ -26,10 +26,13 @@ else (NOT RaftLib_FOUND)
     target_compile_definitions(search_qt_std_pw PRIVATE -DUSE_QTHREAD=1)
     add_raftbenchmark(search_qt_std_os bmh.cpp)
     target_compile_definitions(search_qt_std_os PRIVATE -DUSE_QTHREAD=1
-        -DONESHOT=1)
+        -DRAFTLIB_ONESHOT=1)
+    add_raftbenchmark(search_qt_std_mix bmh.cpp)
+    target_compile_definitions(search_qt_std_mix PRIVATE -DUSE_QTHREAD=1
+        -DRAFTLIB_MIX=1)
     add_custom_target(search_qt)
     add_dependencies(search_qt search_qt_std_orig search_qt_dyn_orig
-                     search_qt_std_pw search_qt_std_os)
+                     search_qt_std_pw search_qt_std_os search_qt_std_mix)
     if (NOT VL_FOUND)
       MESSAGE(STATUS "WARNING: No libvl found, skip search_qt_vl.")
     else()
@@ -49,8 +52,21 @@ else (NOT RaftLib_FOUND)
     add_raftbenchmark(search_ut_dyn_orig bmh.cpp)
     target_compile_definitions(search_ut_dyn_orig PRIVATE -DRAFTLIB_ORIG=1
         -DUSE_UT=1)
+    add_raftbenchmark(search_ut_std_pw bmh.cpp)
+    target_compile_definitions(search_ut_std_pw PRIVATE -DUSE_UT=1)
+    add_raftbenchmark(search_ut_std_cv bmh.cpp)
+    target_compile_definitions(search_ut_std_cv PRIVATE -DUSE_UT=1
+        -DRAFTLIB_CV=1)
+    add_raftbenchmark(search_ut_std_os bmh.cpp)
+    target_compile_definitions(search_ut_std_os PRIVATE -DUSE_UT=1
+        -DRAFTLIB_ONESHOT=1)
+    add_raftbenchmark(search_ut_std_mix bmh.cpp)
+    target_compile_definitions(search_ut_std_mix PRIVATE -DUSE_UT=1
+        -DRAFTLIB_MIX=1)
     add_custom_target(search_ut)
-    add_dependencies(search_ut search_ut_std_orig search_ut_dyn_orig)
+    add_dependencies(search_ut search_ut_std_orig search_ut_dyn_orig
+                     search_ut_std_pw search_ut_std_cv search_ut_std_os
+                     search_ut_std_mix)
     if (NOT VL_FOUND)
       MESSAGE(STATUS "WARNING: No libvl found, skip search_ut_vl.")
     else()

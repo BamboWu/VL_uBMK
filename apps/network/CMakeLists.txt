@@ -106,7 +106,7 @@ else()
 endif()
 
 if(NOT (ZMQ_STATIC_FOUND OR ZMQ_DYNAMIC_FOUND))
-  MESSAGE(STATUS "WARNING: No zmq library, skip bitonic_zmq.")
+  MESSAGE(STATUS "WARNING: No zmq library, skip pipeline_zmq.")
 elseif(NOT GCCLIBATOMIC_FOUND)
   MESSAGE(STATUS "WARNING: No atomic library, skip pipeline_zmq.")
 else()
@@ -121,4 +121,72 @@ else()
   if (ZMQ_STATIC_FOUND)
     target_compile_options(pipeline_zmq PRIVATE -static -pthread)
   endif()
+endif()
+
+if (NOT RaftLib_FOUND)
+  MESSAGE(STATUS "WARNING: No RaftLib found, skip pipeline_rl.")
+else (NOT RaftLib_FOUND)
+  if (NOT QTHREAD_FOUND)
+    MESSAGE(STATUS "WARNING: No qthread found, skip pipeline_qt.")
+  else (NOT QTHREAD_FOUND)
+    add_raftbenchmark(pipeline_qt_std_orig rl_pipeline.cpp)
+    target_compile_definitions(pipeline_qt_std_orig PRIVATE
+        -DRAFTLIB_ORIG=1 -DUSE_QTHREAD=1 -DSTDALLOC=1 -DPOOL_SIZE=420
+        -DSTAGE1_READ=1 -DSTAGE1_WRITE=1 -DSTAGE2_READ=1 -DSTAGE2_WRITE=1)
+    add_raftbenchmark(pipeline_qt_dyn_orig rl_pipeline.cpp)
+    target_compile_definitions(pipeline_qt_dyn_orig PRIVATE
+        -DRAFTLIB_ORIG=1 -DUSE_QTHREAD=1 -DPOOL_SIZE=420
+        -DSTAGE1_READ=1 -DSTAGE1_WRITE=1 -DSTAGE2_READ=1 -DSTAGE2_WRITE=1)
+    add_raftbenchmark(pipeline_qt_std_pw rl_pipeline.cpp)
+    target_compile_definitions(pipeline_qt_std_pw PRIVATE
+        -DUSE_QTHREAD=1 -DPOOL_SIZE=420
+        -DSTAGE1_READ=1 -DSTAGE1_WRITE=1 -DSTAGE2_READ=1 -DSTAGE2_WRITE=1)
+    add_raftbenchmark(pipeline_qt_std_os rl_pipeline.cpp)
+    target_compile_definitions(pipeline_qt_std_os PRIVATE
+        -DRAFTLIB_ONESHOT=1 -DUSE_QTHREAD=1 -DPOOL_SIZE=420
+        -DSTAGE1_READ=1 -DSTAGE1_WRITE=1 -DSTAGE2_READ=1 -DSTAGE2_WRITE=1)
+    add_raftbenchmark(pipeline_qt_std_mix rl_pipeline.cpp)
+    target_compile_definitions(pipeline_qt_std_mix PRIVATE
+        -DRAFTLIB_MIX=1 -DUSE_QTHREAD=1 -DPOOL_SIZE=420
+        -DSTAGE1_READ=1 -DSTAGE1_WRITE=1 -DSTAGE2_READ=1 -DSTAGE2_WRITE=1)
+
+    add_custom_target(pipeline_qt)
+    add_dependencies(pipeline_qt
+                     pipeline_qt_std_orig pipeline_qt_dyn_orig
+                     pipeline_qt_std_pw pipeline_qt_std_os pipeline_qt_std_mix)
+  endif(NOT QTHREAD_FOUND)
+  if (NOT UT_FOUND)
+    MESSAGE(STATUS "WARNING: No libut found, skip pipeline_ut.")
+  else (NOT UT_FOUND)
+    add_raftbenchmark(pipeline_ut_std_orig rl_pipeline.cpp)
+    target_compile_definitions(pipeline_ut_std_orig PRIVATE
+        -DRAFTLIB_ORIG=1 -DUSE_UT=1 -DSTDALLOC=1 -DPOOL_SIZE=420
+        -DSTAGE1_READ=1 -DSTAGE1_WRITE=1 -DSTAGE2_READ=1 -DSTAGE2_WRITE=1)
+    add_raftbenchmark(pipeline_ut_dyn_orig rl_pipeline.cpp)
+    target_compile_definitions(pipeline_ut_dyn_orig PRIVATE
+        -DRAFTLIB_ORIG=1 -DUSE_UT=1 -DPOOL_SIZE=420
+        -DSTAGE1_READ=1 -DSTAGE1_WRITE=1 -DSTAGE2_READ=1 -DSTAGE2_WRITE=1)
+    add_raftbenchmark(pipeline_ut_std_pw rl_pipeline.cpp)
+    target_compile_definitions(pipeline_ut_std_pw PRIVATE
+        -DUSE_UT=1 -DPOOL_SIZE=420
+        -DSTAGE1_READ=1 -DSTAGE1_WRITE=1 -DSTAGE2_READ=1 -DSTAGE2_WRITE=1)
+    add_raftbenchmark(pipeline_ut_std_os rl_pipeline.cpp)
+    target_compile_definitions(pipeline_ut_std_os PRIVATE
+        -DRAFTLIB_ONESHOT=1 -DUSE_UT=1 -DPOOL_SIZE=420
+        -DSTAGE1_READ=1 -DSTAGE1_WRITE=1 -DSTAGE2_READ=1 -DSTAGE2_WRITE=1)
+    add_raftbenchmark(pipeline_ut_std_mix rl_pipeline.cpp)
+    target_compile_definitions(pipeline_ut_std_mix PRIVATE
+        -DRAFTLIB_MIX=1 -DUSE_UT=1 -DPOOL_SIZE=420
+        -DSTAGE1_READ=1 -DSTAGE1_WRITE=1 -DSTAGE2_READ=1 -DSTAGE2_WRITE=1)
+    add_raftbenchmark(pipeline_ut_std_cv rl_pipeline.cpp)
+    target_compile_definitions(pipeline_ut_std_cv PRIVATE
+        -DRAFTLIB_CV=1 -DUSE_UT=1 -DPOOL_SIZE=420
+        -DSTAGE1_READ=1 -DSTAGE1_WRITE=1 -DSTAGE2_READ=1 -DSTAGE2_WRITE=1)
+
+    add_custom_target(pipeline_ut)
+    add_dependencies(pipeline_ut
+                     pipeline_ut_std_orig pipeline_ut_dyn_orig
+                     pipeline_ut_std_pw pipeline_ut_std_os pipeline_ut_std_mix
+                     pipeline_ut_std_cv)
+  endif(NOT UT_FOUND)
 endif()

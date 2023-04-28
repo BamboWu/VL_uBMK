@@ -141,6 +141,10 @@ else (NOT RaftLib_FOUND)
     target_compile_definitions(pipeline_qt_std_pw PRIVATE
         -DUSE_QTHREAD=1 -DPOOL_SIZE=420
         -DSTAGE1_READ=1 -DSTAGE1_WRITE=1 -DSTAGE2_READ=1 -DSTAGE2_WRITE=1)
+    add_raftbenchmark(pipeline_qt_dyn_pw rl_pipeline.cpp)
+    target_compile_definitions(pipeline_qt_dyn_pw PRIVATE
+        -DUSE_QTHREAD=1 -DARMQ_DYNAMIC_ALLOC=1 -DPOOL_SIZE=420
+        -DSTAGE1_READ=1 -DSTAGE1_WRITE=1 -DSTAGE2_READ=1 -DSTAGE2_WRITE=1)
     add_raftbenchmark(pipeline_qt_std_os rl_pipeline.cpp)
     target_compile_definitions(pipeline_qt_std_os PRIVATE
         -DRAFTLIB_ONESHOT=1 -DUSE_QTHREAD=1 -DPOOL_SIZE=420
@@ -149,11 +153,16 @@ else (NOT RaftLib_FOUND)
     target_compile_definitions(pipeline_qt_std_mix PRIVATE
         -DRAFTLIB_MIX=1 -DUSE_QTHREAD=1 -DPOOL_SIZE=420
         -DSTAGE1_READ=1 -DSTAGE1_WRITE=1 -DSTAGE2_READ=1 -DSTAGE2_WRITE=1)
+    add_raftbenchmark(pipeline_qt_dyn_mix rl_pipeline.cpp)
+    target_compile_definitions(pipeline_qt_dyn_mix PRIVATE
+        -DRAFTLIB_MIX=1 -DUSE_QTHREAD=1 -DARMQ_DYNAMIC_ALLOC=1 -DPOOL_SIZE=420
+        -DSTAGE1_READ=1 -DSTAGE1_WRITE=1 -DSTAGE2_READ=1 -DSTAGE2_WRITE=1)
 
     add_custom_target(pipeline_qt)
     add_dependencies(pipeline_qt
                      pipeline_qt_std_orig pipeline_qt_dyn_orig
-                     pipeline_qt_std_pw pipeline_qt_std_os pipeline_qt_std_mix)
+                     pipeline_qt_std_pw pipeline_qt_dyn_pw pipeline_qt_std_os
+                     pipeline_qt_std_mix pipeline_qt_dyn_mix)
   endif(NOT QTHREAD_FOUND)
   if (NOT UT_FOUND)
     MESSAGE(STATUS "WARNING: No libut found, skip pipeline_ut.")
@@ -170,6 +179,10 @@ else (NOT RaftLib_FOUND)
     target_compile_definitions(pipeline_ut_std_pw PRIVATE
         -DUSE_UT=1 -DPOOL_SIZE=420
         -DSTAGE1_READ=1 -DSTAGE1_WRITE=1 -DSTAGE2_READ=1 -DSTAGE2_WRITE=1)
+    add_raftbenchmark(pipeline_ut_dyn_pw rl_pipeline.cpp)
+    target_compile_definitions(pipeline_ut_dyn_pw PRIVATE
+        -DUSE_UT=1 -DARMQ_DYNAMIC_ALLOC=1 -DPOOL_SIZE=420
+        -DSTAGE1_READ=1 -DSTAGE1_WRITE=1 -DSTAGE2_READ=1 -DSTAGE2_WRITE=1)
     add_raftbenchmark(pipeline_ut_std_os rl_pipeline.cpp)
     target_compile_definitions(pipeline_ut_std_os PRIVATE
         -DRAFTLIB_ONESHOT=1 -DUSE_UT=1 -DPOOL_SIZE=420
@@ -178,15 +191,114 @@ else (NOT RaftLib_FOUND)
     target_compile_definitions(pipeline_ut_std_mix PRIVATE
         -DRAFTLIB_MIX=1 -DUSE_UT=1 -DPOOL_SIZE=420
         -DSTAGE1_READ=1 -DSTAGE1_WRITE=1 -DSTAGE2_READ=1 -DSTAGE2_WRITE=1)
+    add_raftbenchmark(pipeline_ut_dyn_mix rl_pipeline.cpp)
+    target_compile_definitions(pipeline_ut_dyn_mix PRIVATE
+        -DRAFTLIB_MIX=1 -DUSE_UT=1 -DARMQ_DYNAMIC_ALLOC=1 -DPOOL_SIZE=420
+        -DSTAGE1_READ=1 -DSTAGE1_WRITE=1 -DSTAGE2_READ=1 -DSTAGE2_WRITE=1)
     add_raftbenchmark(pipeline_ut_std_cv rl_pipeline.cpp)
     target_compile_definitions(pipeline_ut_std_cv PRIVATE
         -DRAFTLIB_CV=1 -DUSE_UT=1 -DPOOL_SIZE=420
+        -DSTAGE1_READ=1 -DSTAGE1_WRITE=1 -DSTAGE2_READ=1 -DSTAGE2_WRITE=1)
+    add_raftbenchmark(pipeline_ut_dyn_cv rl_pipeline.cpp)
+    target_compile_definitions(pipeline_ut_dyn_cv PRIVATE
+        -DRAFTLIB_CV=1 -DARMQ_DYNAMIC_ALLOC=1 -DUSE_UT=1 -DPOOL_SIZE=420
         -DSTAGE1_READ=1 -DSTAGE1_WRITE=1 -DSTAGE2_READ=1 -DSTAGE2_WRITE=1)
 
     add_custom_target(pipeline_ut)
     add_dependencies(pipeline_ut
                      pipeline_ut_std_orig pipeline_ut_dyn_orig
-                     pipeline_ut_std_pw pipeline_ut_std_os pipeline_ut_std_mix
-                     pipeline_ut_std_cv)
+                     pipeline_ut_std_pw pipeline_ut_dyn_pw pipeline_ut_std_os
+                     pipeline_ut_std_mix pipeline_ut_dyn_mix pipeline_ut_std_cv
+                     pipeline_ut_dyn_cv)
+  endif(NOT UT_FOUND)
+endif()
+
+if (NOT RaftLib_FOUND)
+  MESSAGE(STATUS "WARNING: No RaftLib found, skip firewall_rl.")
+else (NOT RaftLib_FOUND)
+  if (NOT QTHREAD_FOUND)
+    MESSAGE(STATUS "WARNING: No qthread found, skip firewall_qt.")
+  else (NOT QTHREAD_FOUND)
+    add_raftbenchmark(firewall_qt_std_orig rl_firewall.cpp)
+    target_compile_definitions(firewall_qt_std_orig PRIVATE
+        -DRAFTLIB_ORIG=1 -DUSE_QTHREAD=1 -DSTDALLOC=1 -DPOOL_SIZE=420
+        -DSTAGE1_READ=1 -DSTAGE1_WRITE=1 -DSTAGE2_READ=1 -DSTAGE2_WRITE=1)
+    add_raftbenchmark(firewall_qt_dyn_orig rl_firewall.cpp)
+    target_compile_definitions(firewall_qt_dyn_orig PRIVATE
+        -DRAFTLIB_ORIG=1 -DUSE_QTHREAD=1 -DPOOL_SIZE=420
+        -DSTAGE1_READ=1 -DSTAGE1_WRITE=1 -DSTAGE2_READ=1 -DSTAGE2_WRITE=1)
+    add_raftbenchmark(firewall_qt_std_pw rl_firewall.cpp)
+    target_compile_definitions(firewall_qt_std_pw PRIVATE
+        -DUSE_QTHREAD=1 -DPOOL_SIZE=420
+        -DSTAGE1_READ=1 -DSTAGE1_WRITE=1 -DSTAGE2_READ=1 -DSTAGE2_WRITE=1)
+    add_raftbenchmark(firewall_qt_dyn_pw rl_firewall.cpp)
+    target_compile_definitions(firewall_qt_dyn_pw PRIVATE
+        -DUSE_QTHREAD=1 -DARMQ_DYNAMIC_ALLOC=1 -DPOOL_SIZE=420
+        -DSTAGE1_READ=1 -DSTAGE1_WRITE=1 -DSTAGE2_READ=1 -DSTAGE2_WRITE=1)
+    add_raftbenchmark(firewall_qt_std_os rl_firewall.cpp)
+    target_compile_definitions(firewall_qt_std_os PRIVATE
+        -DRAFTLIB_ONESHOT=1 -DUSE_QTHREAD=1 -DPOOL_SIZE=420
+        -DSTAGE1_READ=1 -DSTAGE1_WRITE=1 -DSTAGE2_READ=1 -DSTAGE2_WRITE=1)
+    add_raftbenchmark(firewall_qt_std_mix rl_firewall.cpp)
+    target_compile_definitions(firewall_qt_std_mix PRIVATE
+        -DRAFTLIB_MIX=1 -DUSE_QTHREAD=1 -DPOOL_SIZE=420
+        -DSTAGE1_READ=1 -DSTAGE1_WRITE=1 -DSTAGE2_READ=1 -DSTAGE2_WRITE=1)
+    add_raftbenchmark(firewall_qt_dyn_mix rl_firewall.cpp)
+    target_compile_definitions(firewall_qt_dyn_mix PRIVATE
+        -DRAFTLIB_MIX=1 -DUSE_QTHREAD=1 -DARMQ_DYNAMIC_ALLOC=1 -DPOOL_SIZE=420
+        -DSTAGE1_READ=1 -DSTAGE1_WRITE=1 -DSTAGE2_READ=1 -DSTAGE2_WRITE=1)
+
+    add_custom_target(firewall_qt)
+    add_dependencies(firewall_qt
+                     firewall_qt_std_orig firewall_qt_dyn_orig
+                     firewall_qt_std_pw firewall_qt_dyn_pw firewall_qt_std_os
+                     firewall_qt_std_mix firewall_qt_dyn_mix)
+  endif(NOT QTHREAD_FOUND)
+  if (NOT UT_FOUND)
+    MESSAGE(STATUS "WARNING: No libut found, skip firewall_ut.")
+  else (NOT UT_FOUND)
+    add_raftbenchmark(firewall_ut_std_orig rl_firewall.cpp)
+    target_compile_definitions(firewall_ut_std_orig PRIVATE
+        -DRAFTLIB_ORIG=1 -DUSE_UT=1 -DSTDALLOC=1 -DPOOL_SIZE=420
+        -DSTAGE1_READ=1 -DSTAGE1_WRITE=1 -DSTAGE2_READ=1 -DSTAGE2_WRITE=1)
+    add_raftbenchmark(firewall_ut_dyn_orig rl_firewall.cpp)
+    target_compile_definitions(firewall_ut_dyn_orig PRIVATE
+        -DRAFTLIB_ORIG=1 -DUSE_UT=1 -DPOOL_SIZE=420
+        -DSTAGE1_READ=1 -DSTAGE1_WRITE=1 -DSTAGE2_READ=1 -DSTAGE2_WRITE=1)
+    add_raftbenchmark(firewall_ut_std_pw rl_firewall.cpp)
+    target_compile_definitions(firewall_ut_std_pw PRIVATE
+        -DUSE_UT=1 -DPOOL_SIZE=420
+        -DSTAGE1_READ=1 -DSTAGE1_WRITE=1 -DSTAGE2_READ=1 -DSTAGE2_WRITE=1)
+    add_raftbenchmark(firewall_ut_dyn_pw rl_firewall.cpp)
+    target_compile_definitions(firewall_ut_dyn_pw PRIVATE
+        -DUSE_UT=1 -DARMQ_DYNAMIC_ALLOC=1 -DPOOL_SIZE=420
+        -DSTAGE1_READ=1 -DSTAGE1_WRITE=1 -DSTAGE2_READ=1 -DSTAGE2_WRITE=1)
+    add_raftbenchmark(firewall_ut_std_os rl_firewall.cpp)
+    target_compile_definitions(firewall_ut_std_os PRIVATE
+        -DRAFTLIB_ONESHOT=1 -DUSE_UT=1 -DPOOL_SIZE=420
+        -DSTAGE1_READ=1 -DSTAGE1_WRITE=1 -DSTAGE2_READ=1 -DSTAGE2_WRITE=1)
+    add_raftbenchmark(firewall_ut_std_mix rl_firewall.cpp)
+    target_compile_definitions(firewall_ut_std_mix PRIVATE
+        -DRAFTLIB_MIX=1 -DUSE_UT=1 -DPOOL_SIZE=420
+        -DSTAGE1_READ=1 -DSTAGE1_WRITE=1 -DSTAGE2_READ=1 -DSTAGE2_WRITE=1)
+    add_raftbenchmark(firewall_ut_dyn_mix rl_firewall.cpp)
+    target_compile_definitions(firewall_ut_dyn_mix PRIVATE
+        -DRAFTLIB_MIX=1 -DUSE_UT=1 -DARMQ_DYNAMIC_ALLOC=1 -DPOOL_SIZE=420
+        -DSTAGE1_READ=1 -DSTAGE1_WRITE=1 -DSTAGE2_READ=1 -DSTAGE2_WRITE=1)
+    add_raftbenchmark(firewall_ut_std_cv rl_firewall.cpp)
+    target_compile_definitions(firewall_ut_std_cv PRIVATE
+        -DRAFTLIB_CV=1 -DUSE_UT=1 -DPOOL_SIZE=420
+        -DSTAGE1_READ=1 -DSTAGE1_WRITE=1 -DSTAGE2_READ=1 -DSTAGE2_WRITE=1)
+    add_raftbenchmark(firewall_ut_dyn_cv rl_firewall.cpp)
+    target_compile_definitions(firewall_ut_dyn_cv PRIVATE
+        -DRAFTLIB_CV=1 -DARMQ_DYNAMIC_ALLOC=1 -DUSE_UT=1 -DPOOL_SIZE=420
+        -DSTAGE1_READ=1 -DSTAGE1_WRITE=1 -DSTAGE2_READ=1 -DSTAGE2_WRITE=1)
+
+    add_custom_target(firewall_ut)
+    add_dependencies(firewall_ut
+                     firewall_ut_std_orig firewall_ut_dyn_orig
+                     firewall_ut_std_pw firewall_ut_dyn_pw firewall_ut_std_os
+                     firewall_ut_std_mix firewall_ut_dyn_mix firewall_ut_std_cv
+                     firewall_ut_dyn_cv)
   endif(NOT UT_FOUND)
 endif()

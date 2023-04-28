@@ -16,6 +16,9 @@ else (NOT RaftLib_FOUND)
         -DUSE_QTHREAD=1)
     add_raftbenchmark(demo0_qt_std_armq armq_demo.cpp)
     target_compile_definitions(demo0_qt_std_armq PRIVATE -DUSE_QTHREAD=1)
+    add_raftbenchmark(demo0_qt_dyn_armq armq_demo.cpp)
+    target_compile_definitions(demo0_qt_dyn_armq PRIVATE -DUSE_QTHREAD=1
+        -DARMQ_DYNAMIC_ALLOC=1)
 
     add_raftbenchmark(demo1_qt_std_orig armq_demo.cpp)
     target_compile_definitions(demo1_qt_std_orig PRIVATE -DRAFTLIB_ORIG=1
@@ -26,10 +29,15 @@ else (NOT RaftLib_FOUND)
     add_raftbenchmark(demo1_qt_std_armq armq_demo.cpp)
     target_compile_definitions(demo1_qt_std_armq PRIVATE -DUSE_QTHREAD=1
         -DDUPLICATE_FILTERS=1)
+    add_raftbenchmark(demo1_qt_dyn_armq armq_demo.cpp)
+    target_compile_definitions(demo1_qt_dyn_armq PRIVATE -DUSE_QTHREAD=1
+        -DDUPLICATE_FILTERS=1 -DARMQ_DYNAMIC_ALLOC=1)
     add_custom_target(demo_qt)
     add_dependencies(demo_qt
-                     demo0_qt_std_orig demo0_qt_dyn_orig demo0_qt_std_armq
-                     demo1_qt_std_orig demo1_qt_dyn_orig demo1_qt_std_armq)
+                     demo0_qt_std_orig demo0_qt_dyn_orig
+                     demo0_qt_std_armq demo0_qt_dyn_armq
+                     demo1_qt_std_orig demo1_qt_dyn_orig
+                     demo1_qt_std_armq demo1_qt_dyn_armq)
   endif(NOT QTHREAD_FOUND)
   if (NOT UT_FOUND)
     MESSAGE(STATUS "WARNING: No libut found, skip search_ut.")
@@ -42,9 +50,9 @@ else (NOT RaftLib_FOUND)
         -DUSE_UT=1)
     add_raftbenchmark(demo0_ut_std_armq armq_demo.cpp)
     target_compile_definitions(demo0_ut_std_armq PRIVATE -DUSE_UT=1)
-    add_custom_target(demo0_ut)
-    add_dependencies(demo0_ut demo0_ut_std_orig demo0_ut_dyn_orig
-                     demo0_ut_std_armq)
+    add_raftbenchmark(demo0_ut_dyn_armq armq_demo.cpp)
+    target_compile_definitions(demo0_ut_dyn_armq PRIVATE -DUSE_UT=1
+        -DARMQ_DYNAMIC_ALLOC=1)
 
     add_raftbenchmark(demo1_ut_std_orig armq_demo.cpp)
     target_compile_definitions(demo1_ut_std_orig PRIVATE -DRAFTLIB_ORIG=1
@@ -55,9 +63,14 @@ else (NOT RaftLib_FOUND)
     add_raftbenchmark(demo1_ut_std_armq armq_demo.cpp)
     target_compile_definitions(demo1_ut_std_armq PRIVATE -DUSE_UT=1
         -DDUPLICATE_FILTERS=1)
+    add_raftbenchmark(demo1_ut_dyn_armq armq_demo.cpp)
+    target_compile_definitions(demo1_ut_dyn_armq PRIVATE -DUSE_UT=1
+        -DDUPLICATE_FILTERS=1 -DARMQ_DYNAMIC_ALLOC=1)
     add_custom_target(demo_ut)
     add_dependencies(demo_ut
-                     demo0_ut_std_orig demo0_ut_dyn_orig demo0_ut_std_armq
-                     demo1_ut_std_orig demo1_ut_dyn_orig demo1_ut_std_armq)
+                     demo0_ut_std_orig demo0_ut_dyn_orig
+                     demo0_ut_std_armq demo0_ut_dyn_armq
+                     demo1_ut_std_orig demo1_ut_dyn_orig
+                     demo1_ut_std_armq demo1_ut_dyn_armq)
   endif(NOT UT_FOUND)
 endif()

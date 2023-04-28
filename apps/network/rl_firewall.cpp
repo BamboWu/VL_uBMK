@@ -35,11 +35,11 @@ public:
   stage0(const std::size_t num_packets, const int fanout) :
       raft::Kernel(), npackets(num_packets) {
 #if RAFTLIB_ORIG
-      for (int i = 0; fanout > i; ++i) {
-        add_output<PktPtr>(port_name_of_i(i));
-      }
+    for (int i = 0; fanout > i; ++i) {
+      add_output<PktPtr>(port_name_of_i(i));
+    }
 #else
-      add_output<PktPtr>("0"_port);
+    add_output<PktPtr>("0"_port);
 #endif
     void *mem_pool = memalign(L1D_CACHE_LINE_SIZE, POOL_SIZE << 1);
     void *hdr_pool = memalign(L1D_CACHE_LINE_SIZE,
@@ -85,9 +85,10 @@ private:
 
   PktPtr genpkt() {
     Packet * pkt = pkt_pool[cnt % POOL_SIZE];
-    pkt->ipheader.data.srcIP = cnt;
-    pkt->ipheader.data.dstIP = ~cnt;
-    pkt->ipheader.data.checksumIP =
+    pkt->ipheader.data.srcIP = cnt - (cnt % BULK_SIZE);
+    pkt->ipheader.data.dstIP = (cnt % BULK_SIZE);
+    pkt->ipheader.data.checksumIP = (0 == (cnt % 8)) ?
+      pkt->ipheader.data.srcIP ^ (pkt->ipheader.data.dstIP + 1) :
       pkt->ipheader.data.srcIP ^ pkt->ipheader.data.dstIP;
     pkt->tcpheader.data.srcPort = (uint16_t)npackets;
     pkt->tcpheader.data.dstPort = (uint16_t)npackets;
@@ -104,13 +105,15 @@ private:
 class stage1 : public raft::Kernel {
 public:
   stage1() : raft::Kernel() {
-    add_input<PktPtr>("0"_port);
-    add_output<PktPtr>("0"_port);
+      add_input<PktPtr>("0"_port);
+      add_output<PktPtr>("0"_port); /* to stage2correct */
+      add_output<PktPtr>("1"_port); /* to stage2mistake */
   }
 
   stage1(const stage1 &other) {
-    add_input<PktPtr>("0"_port);
-    add_output<PktPtr>("0"_port);
+      add_input<PktPtr>("0"_port);
+      add_output<PktPtr>("0"_port); /* to stage2correct */
+      add_output<PktPtr>("1"_port); /* to stage2mistake */
   }
 
 #if RAFTLIB_ORIG
@@ -118,7 +121,11 @@ public:
   virtual raft::kstatus run() {
     PktPtr pktptr;
     input["0"_port].pop(pktptr);
-    output["0"_port].push(process(pktptr.pkt));
+    if (iscorrupted(pktptr.pkt)) {
+        output["1"_port].push(process(pktptr.pkt));
+    } else {
+        output["0"_port].push(process(pktptr.pkt));
+    }
     return raft::kstatus::proceed;
   }
 #else
@@ -126,7 +133,11 @@ public:
                                          raft::StreamingData &bufOut) {
     PktPtr pktptr;
     dataIn.pop(pktptr);
-    bufOut.push((this)->process(pktptr.pkt));
+    if (iscorrupted(pktptr.pkt)) {
+        bufOut["1"_port].push(process(pktptr.pkt));
+    } else {
+        bufOut["0"_port].push(process(pktptr.pkt));
+    }
     return raft::kstatus::proceed;
   }
   virtual bool pop(raft::Task *task, bool dryrun) { return true; }
@@ -135,33 +146,78 @@ public:
 
 protected:
 
-  virtual PktPtr process(Packet *pkt) {
+  bool iscorrupted(Packet *pkt) {
+    if (pkt->ipheader.data.checksumIP !=
+        (pkt->ipheader.data.srcIP ^ pkt->ipheader.data.dstIP) ||
+        pkt->tcpheader.data.checksumTCP !=
+        (pkt->tcpheader.data.srcPort ^
+         pkt->tcpheader.data.dstPort)) {
+        return true;
+    } else {
+        return false;
+    }
+  }
+
+  PktPtr process(Packet *pkt) {
     uint16_t corrupted = 0;
 #ifdef STAGE1_READ
-    if (pkt->ipheader.data.checksumIP !=
-        (pkt->ipheader.data.srcIP ^ pkt->ipheader.data.dstIP)) {
-      corrupted++;
-    }
+      if (pkt->ipheader.data.checksumIP !=
+          (pkt->ipheader.data.srcIP ^ pkt->ipheader.data.dstIP)) {
+        corrupted++;
+      }
 #endif
 #ifdef STAGE1_WRITE
-    pkt->ipheader.data.checksumIP = corrupted;
+      pkt->ipheader.data.checksumIP = corrupted;
 #endif
-    return PktPtr(pkt);
-  }
+      return PktPtr(pkt);
+    }
 
 };
 
-class stage2 : public stage1 {
+class stage2 : public raft::Kernel {
 public:
-  stage2() : stage1() {}
-  stage2(const stage2 &other) : stage1() {}
-
+  stage2(int fanin) : raft::Kernel() {
 #if RAFTLIB_ORIG
-  CLONE();
+    for (int i = 0; fanin > i; ++i)
+    {
+      add_input<PktPtr>(port_name_of_i(i));
+    }
+#else
+    add_input<PktPtr>("0"_port);
 #endif
+    cnt = 0;
+  }
+
+  std::size_t cnt;
 
 protected:
-  virtual PktPtr process(Packet *pkt) override {
+
+#if RAFTLIB_ORIG
+  virtual raft::kstatus run() {
+    PktPtr pktptr;
+    for (auto &port : (this)->input) {
+      if (0 < port.size())
+      {
+        port.pop(pktptr);
+        process(pktptr.pkt);
+        cnt++;
+      }
+    }
+    return raft::kstatus::proceed;
+  }
+#else
+  virtual raft::kstatus::value_t compute(raft::StreamingData &dataIn,
+                                         raft::StreamingData &bufOut) {
+    PktPtr pktptr;
+    dataIn.pop(pktptr);
+    process(pktptr.pkt);
+    cnt++;
+    return raft::kstatus::proceed;
+  }
+  virtual bool pop(raft::Task *task, bool dryrun) { return true; }
+  virtual bool allocate(raft::Task *task, bool dryrun) { return true; }
+#endif
+  virtual PktPtr process(Packet *pkt) {
     uint16_t corrupted = 0;
 #ifdef STAGE2_READ
     if (pkt->tcpheader.data.checksumTCP !=
@@ -177,48 +233,6 @@ protected:
   }
 };
 
-class stage3 : public raft::Kernel {
-public:
-  stage3(const int fanin) : raft::Kernel() {
-#if RAFTLIB_ORIG
-    for (int i = 0; fanin > i; ++i)
-    {
-      add_input<PktPtr>(port_name_of_i(i));
-    }
-#else
-    add_input<PktPtr>("0"_port);
-#endif
-  }
-
-#if RAFTLIB_ORIG
-  virtual raft::kstatus run() {
-    PktPtr pktptr;
-    for (auto &port : (this)->input) {
-      if (0 < port.size())
-      {
-        port.pop(pktptr);
-        corrupted += pktptr.pkt->ipheader.data.checksumIP;
-        corrupted += pktptr.pkt->tcpheader.data.checksumTCP;
-      }
-    }
-    return raft::kstatus::proceed;
-  }
-#else
-  virtual raft::kstatus::value_t compute(raft::StreamingData &dataIn,
-                                         raft::StreamingData &bufOut) {
-    PktPtr pktptr;
-    dataIn.pop(pktptr);
-    corrupted += pktptr.pkt->ipheader.data.checksumIP;
-    corrupted += pktptr.pkt->tcpheader.data.checksumTCP;
-    return raft::kstatus::proceed;
-  }
-  virtual bool pop(raft::Task *task, bool dryrun) { return true; }
-  virtual bool allocate(raft::Task *task, bool dryrun) { return true; }
-#endif
-
-  std::size_t corrupted = 0;
-};
-
 
 int main(int argc, char *argv[]) {
 
@@ -231,20 +245,29 @@ int main(int argc, char *argv[]) {
   if (2 < argc) {
     fanout = atoi(argv[2]);
   }
-  printf("%s 1-%d-%d-1 %lu pkts %d pool\n",
-         argv[0], fanout, fanout, num_packets, POOL_SIZE);
+  printf("%s 1-%d-1-1 %lu pkts %d pool\n",
+         argv[0], fanout, num_packets, POOL_SIZE);
 
   stage0 s0(num_packets, fanout);
-  stage1 s1;
-  stage2 s2;
-  stage3 s3(fanout);
+  stage2 s2correct(fanout), s2mistake(fanout);
 
   raft::DAG dag;
 
 #if RAFTLIB_ORIG
-  dag += s0 <= s1 >> s2 >= s3;
+  for (int i = 0; fanout > i; ++i)
+  {
+     auto *s1_ptr(raft::kernel_maker<stage1>());
+     dag += s0[port_name_of_i(i)] >> raft::order::in >> *s1_ptr;
+     dag += (*s1_ptr)["0"_port] >> raft::order::in >>
+       s2correct[port_name_of_i(i)];
+     dag += (*s1_ptr)["1"_port] >> raft::order::in >>
+       s2mistake[port_name_of_i(i)];
+  }
 #else
-  dag += s0 >> s1 * fanout >> s2 * fanout >> s3;
+  stage1 s1;
+  dag += s0 >> s1 * fanout;
+  dag += s1["0"_port] >> s2correct;
+  dag += s1["1"_port] >> s2mistake;
 #endif
 
   const auto beg(high_resolution_clock::now());
@@ -285,5 +308,6 @@ int main(int argc, char *argv[]) {
 
   std::cout << (end_tsc - beg_tsc) << " ticks elapsed\n";
   std::cout << elapsed.count() << " ns elapsed\n";
+  std::cout << s2correct.cnt << " " << s2mistake.cnt << std::endl;
   return 0;
 }

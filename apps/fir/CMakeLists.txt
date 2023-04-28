@@ -54,3 +54,89 @@ else()
     target_link_libraries(fir_qmd ${CAF_LIBRARY})
   endif(NOT CAF_FOUND)
 endif()
+
+if (NOT RaftLib_FOUND)
+  MESSAGE(STATUS "WARNING: No RaftLib found, skip fir_rl.")
+else (NOT RaftLib_FOUND)
+  if (NOT QTHREAD_FOUND)
+    MESSAGE(STATUS "WARNING: No qthread found, skip fir_qt.")
+  else (NOT QTHREAD_FOUND)
+    add_raftbenchmark(fir_qt_std_orig rl_fir.cpp)
+    target_compile_definitions(fir_qt_std_orig PRIVATE -DRAFTLIB_ORIG=1
+        -DUSE_QTHREAD=1 -DSTDALLOC=1)
+    add_raftbenchmark(fir_qt_dyn_orig rl_fir.cpp)
+    target_compile_definitions(fir_qt_dyn_orig PRIVATE -DRAFTLIB_ORIG=1
+        -DUSE_QTHREAD=1)
+    add_raftbenchmark(fir_qt_std_pw rl_fir.cpp)
+    target_compile_definitions(fir_qt_std_pw PRIVATE -DUSE_QTHREAD=1)
+    add_raftbenchmark(fir_qt_dyn_pw rl_fir.cpp)
+    target_compile_definitions(fir_qt_dyn_pw PRIVATE -DUSE_QTHREAD=1
+        -DARMQ_DYNAMIC_ALLOC=1)
+    add_raftbenchmark(fir_qt_std_os rl_fir.cpp)
+    target_compile_definitions(fir_qt_std_os PRIVATE -DUSE_QTHREAD=1
+        -DRAFTLIB_ONESHOT=1)
+    add_raftbenchmark(fir_qt_std_mix rl_fir.cpp)
+    target_compile_definitions(fir_qt_std_mix PRIVATE -DUSE_QTHREAD=1
+        -DRAFTLIB_MIX=1)
+    add_raftbenchmark(fir_qt_dyn_mix rl_fir.cpp)
+    target_compile_definitions(fir_qt_dyn_mix PRIVATE -DUSE_QTHREAD=1
+        -DRAFTLIB_MIX=1 -DARMQ_DYNAMIC_ALLOC=1)
+    add_custom_target(fir_qt)
+    add_dependencies(fir_qt fir_qt_std_orig fir_qt_dyn_orig
+                     fir_qt_std_pw fir_qt_dyn_pw fir_qt_std_os
+                     fir_qt_std_mix fir_qt_dyn_mix)
+    if (NOT VL_FOUND)
+      MESSAGE(STATUS "WARNING: No libvl found, skip fir_qt_vl.")
+    else()
+      add_raftbenchmark(fir_qt_vl_orig rl_fir.cpp)
+      target_compile_definitions(fir_qt_vl_orig PRIVATE -DRAFTLIB_ORIG=1
+          -DUSE_QTHREAD=1 -DVL=1)
+      target_link_libraries(fir_qt_vl_orig ${VL_LIBRARY})
+      add_dependencies(fir_qt fir_qt_vl_orig)
+    endif()
+  endif(NOT QTHREAD_FOUND)
+  if (NOT UT_FOUND)
+    MESSAGE(STATUS "WARNING: No libut found, skip fir_ut.")
+  else (NOT UT_FOUND)
+    add_raftbenchmark(fir_ut_std_orig rl_fir.cpp)
+    target_compile_definitions(fir_ut_std_orig PRIVATE -DRAFTLIB_ORIG=1
+        -DUSE_UT=1 -DSTDALLOC=1)
+    add_raftbenchmark(fir_ut_dyn_orig rl_fir.cpp)
+    target_compile_definitions(fir_ut_dyn_orig PRIVATE -DRAFTLIB_ORIG=1
+        -DUSE_UT=1)
+    add_raftbenchmark(fir_ut_std_pw rl_fir.cpp)
+    target_compile_definitions(fir_ut_std_pw PRIVATE -DUSE_UT=1)
+    add_raftbenchmark(fir_ut_dyn_pw rl_fir.cpp)
+    target_compile_definitions(fir_ut_dyn_pw PRIVATE -DUSE_UT=1
+        -DARMQ_DYNAMIC_ALLOC=1)
+    add_raftbenchmark(fir_ut_std_cv rl_fir.cpp)
+    target_compile_definitions(fir_ut_std_cv PRIVATE -DUSE_UT=1
+        -DRAFTLIB_CV=1)
+    add_raftbenchmark(fir_ut_dyn_cv rl_fir.cpp)
+    target_compile_definitions(fir_ut_dyn_cv PRIVATE -DUSE_UT=1
+        -DRAFTLIB_CV=1 -DARMQ_DYNAMIC_ALLOC=1)
+    add_raftbenchmark(fir_ut_std_os rl_fir.cpp)
+    target_compile_definitions(fir_ut_std_os PRIVATE -DUSE_UT=1
+        -DRAFTLIB_ONESHOT=1)
+    add_raftbenchmark(fir_ut_std_mix rl_fir.cpp)
+    target_compile_definitions(fir_ut_std_mix PRIVATE -DUSE_UT=1
+        -DRAFTLIB_MIX=1)
+    add_raftbenchmark(fir_ut_dyn_mix rl_fir.cpp)
+    target_compile_definitions(fir_ut_dyn_mix PRIVATE -DUSE_UT=1
+        -DRAFTLIB_MIX=1 -DARMQ_DYNAMIC_ALLOC=1)
+    add_custom_target(fir_ut)
+    add_dependencies(fir_ut fir_ut_std_orig fir_ut_dyn_orig
+                     fir_ut_std_pw fir_ut_dyn_pw fir_ut_std_cv
+                     fir_ut_dyn_cv fir_ut_std_os fir_ut_std_mix
+                     fir_ut_dyn_mix)
+    if (NOT VL_FOUND)
+      MESSAGE(STATUS "WARNING: No libvl found, skip fir_ut_vl.")
+    else()
+      add_raftbenchmark(fir_ut_vl_orig rl_fir.cpp)
+      target_compile_definitions(fir_ut_vl_orig PRIVATE -DRAFTLIB_ORIG=1
+          -DUSE_UT=1 -DVL=1)
+      target_link_libraries(fir_ut_vl_orig ${VL_LIBRARY})
+      add_dependencies(fir_ut fir_ut_vl_orig)
+    endif()
+  endif(NOT UT_FOUND)
+endif()

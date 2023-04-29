@@ -12,6 +12,10 @@
 #include <algorithm>
 #include <raft>
 
+#if RAFTLIB_ORIG
+#include "raftlib_orig.hpp"
+#endif
+
 #ifdef HMC
 #include "HMC.h"
 #endif
@@ -20,12 +24,15 @@
 #include "SIM.h"
 #endif
 
+#include "timing.h"
+
 #ifndef NOGEM5
 #include "gem5/m5ops.h"
 #endif
 
 using namespace std;
 
+size_t repetition = 0;
 size_t maxiter = 0;
 size_t beginiter = 0;
 size_t enditer = 0;
@@ -79,63 +86,105 @@ class reduce_kernel : public raft::parallel_k
 public:
     reduce_kernel(int16_t* cnts, int tc_num) :
         raft::parallel_k(), pcnts(cnts) {
+#if RAFTLIB_ORIG
         for (int i = 0; tc_num > i; ++i) {
             addPortTo<struct reduction_msg>(input);
         }
+#else
+        add_input<struct reduction_msg>("0"_port);
+#endif
     }
+#if RAFTLIB_ORIG
     virtual raft::kstatus run() {
         for (auto& port : input) {
             if (0 < port.size()) {
                 auto& msg(port.template peek<struct reduction_msg>());
-                pcnts[msg.src] += msg.cnt;
-                pcnts[msg.dst] += msg.cnt;
+                update_cnt(msg);
                 port.recycle(1);
             }
         }
-        return raft::proceed;
+        return raft::kstatus::proceed;
+    }
+#else
+    virtual raft::kstatus::value_t compute(raft::StreamingData &dataIn,
+                                           raft::StreamingData &bufOut) {
+        auto& msg(dataIn.template peek<struct reduction_msg>());
+        update_cnt(msg);
+        dataIn.recycle();
+        return raft::kstatus::proceed;
+    }
+    virtual bool pop(raft::Task *task, bool dryrun) { return true; }
+    virtual bool allocate(raft::Task *task, bool dryrun) { return true; }
+#endif
+
+    inline void update_cnt(struct reduction_msg& msg) {
+#ifdef __GNUC__
+        __atomic_add_fetch(&pcnts[msg.src], msg.cnt, __ATOMIC_RELAXED);
+        __atomic_add_fetch(&pcnts[msg.dst], msg.cnt, __ATOMIC_RELAXED);
+#else
+        pcnts[msg.src] += msg.cnt;
+        pcnts[msg.dst] += msg.cnt;
+#endif
     }
     int16_t* pcnts;
 };
 
-class count_kernel : public raft::kernel
+class count_kernel : public raft::parallel_k
 {
 public:
-    count_kernel() : raft::kernel() {
-        input.addPort<struct intersect_msg>("input");
-        output.addPort<struct reduction_msg>("output");
-    }
-    count_kernel(const count_kernel& other) : raft::kernel() {
-        input.addPort<struct intersect_msg>("input");
-        output.addPort<struct reduction_msg>("output");
+    count_kernel() : raft::parallel_k() {
+        add_input<struct intersect_msg>("input"_port);
+        add_output<struct reduction_msg>("output"_port);
     }
     ~count_kernel() = default;
-    virtual raft::kstatus run() {
-        // run triangle count now
-        struct intersect_msg& msg(input["input"].peek<intersect_msg>());
-        int16_t cnt = get_intersect_cnt(*msg.src_set, *msg.dst_set);
-        output["output"].template push<struct reduction_msg>(
-                {msg.src, msg.dst, cnt});
-        input["input"].recycle();
-        return raft::proceed;
+#if RAFTLIB_ORIG
+    count_kernel(const count_kernel& other) : raft::parallel_k() {
+        add_input<struct intersect_msg>("input"_port);
+        add_output<struct reduction_msg>("output"_port);
     }
     CLONE(); // enable cloning
-};
-
-class lookup_kernel : public raft::kernel
-{
-public:
-    lookup_kernel(graph_t& g) : raft::kernel(), g_(g) {
-        input.addPort<vertex_iterator>("input");
-        output.addPort<struct intersect_msg>("output");
-    }
-    lookup_kernel(const lookup_kernel& other) : raft::kernel(), g_(other.g_) {
-        input.addPort<vertex_iterator>("input");
-        output.addPort<struct intersect_msg>("output");
-    }
-    ~lookup_kernel() = default;
     virtual raft::kstatus run() {
         // run triangle count now
-        vertex_iterator& vit(input["input"].peek<vertex_iterator>());
+        struct intersect_msg& msg(
+                input["input"_port].peek<struct intersect_msg>());
+        int16_t cnt = get_intersect_cnt(*msg.src_set, *msg.dst_set);
+        output["output"_port].template push<struct reduction_msg>(
+                {msg.src, msg.dst, cnt});
+        input["input"_port].recycle();
+        return raft::kstatus::proceed;
+    }
+#else
+    virtual raft::kstatus::value_t compute(raft::StreamingData &dataIn,
+                                           raft::StreamingData &bufOut) {
+        auto& msg(dataIn.template peek<struct intersect_msg>());
+        int16_t cnt = get_intersect_cnt(*msg.src_set, *msg.dst_set);
+        bufOut.template push<struct reduction_msg>(
+                {msg.src, msg.dst, cnt});
+        dataIn.recycle();
+        return raft::kstatus::proceed;
+    }
+    virtual bool pop(raft::Task *task, bool dryrun) { return true; }
+    virtual bool allocate(raft::Task *task, bool dryrun) { return true; }
+#endif
+};
+
+class lookup_kernel : public raft::parallel_k
+{
+public:
+    lookup_kernel(graph_t& g) : raft::parallel_k(), g_(g) {
+        add_input<vertex_iterator>("input"_port);
+        add_output<struct intersect_msg>("output"_port);
+    }
+    ~lookup_kernel() = default;
+#if RAFTLIB_ORIG
+    lookup_kernel(const lookup_kernel& other) :
+        raft::parallel_k(), g_(other.g_) {
+        add_input<vertex_iterator>("input"_port);
+        add_output<struct intersect_msg>("output"_port);
+    }
+    CLONE(); // enable cloning
+    virtual raft::kstatus run() {
+        vertex_iterator& vit(input["input"_port].peek<vertex_iterator>());
 
         vector<uint64_t> & src_set = vit->property().neighbor_set;
 
@@ -145,13 +194,34 @@ public:
             vertex_iterator vit_targ = g_.find_vertex(eit->target());
 
             vector<uint64_t> & dest_set = vit_targ->property().neighbor_set;
-            output["output"].template push<struct intersect_msg>(
+            output["output"_port].template push<struct intersect_msg>(
                     {vit->id(), vit_targ->id(), src_set, dest_set});
         }
-        input["input"].recycle();
-        return raft::proceed;
+        input["input"_port].recycle();
+        return raft::kstatus::proceed;
     }
-    CLONE(); // enable cloning
+#else
+    virtual raft::kstatus::value_t compute(raft::StreamingData &dataIn,
+                                           raft::StreamingData &bufOut) {
+        vertex_iterator& vit(dataIn.peek<vertex_iterator>());
+
+        vector<uint64_t> & src_set = vit->property().neighbor_set;
+
+        for (edge_iterator eit=vit->edges_begin();eit!=vit->edges_end();eit++) 
+        {
+            if (vit->id() > eit->target()) continue; // skip reverse edges
+            vertex_iterator vit_targ = g_.find_vertex(eit->target());
+
+            vector<uint64_t> & dest_set = vit_targ->property().neighbor_set;
+            bufOut.template push<struct intersect_msg>(
+                    {vit->id(), vit_targ->id(), src_set, dest_set});
+        }
+        dataIn.recycle();
+        return raft::kstatus::proceed;
+    }
+    virtual bool pop(raft::Task *task, bool dryrun) { return true; }
+    virtual bool allocate(raft::Task *task, bool dryrun) { return true; }
+#endif
 private:
     graph_t& g_;
 };
@@ -160,31 +230,59 @@ class workset_kernel : public raft::parallel_k
 {
 public:
     workset_kernel(graph_t& g, int tc_num) : raft::parallel_k(), g_(g) {
+#if RAFTLIB_ORIG
         for (int i = 0; tc_num > i; ++i) {
             addPortTo<vertex_iterator>(output);
         }
+#else
+        add_output<vertex_iterator>("0"_port);
+#endif
         vid = 0;
+        rep = 0;
     }
+#if RAFTLIB_ORIG
     virtual raft::kstatus run() {
         for (auto& port : output) {
             if (port.space_avail()) {
                 vertex_iterator vit = g_.find_vertex(vid);
                 port.push(vit);
                 if (g_.num_vertices() <= ++vid) {
-                    return raft::stop;
+                    if (repetition <= ++rep) {
+                        return raft::kstatus::stop;
+                    }
+                    vid = 0;
                 }
             }
         }
-        return raft::proceed;
+        return raft::kstatus::proceed;
     }
+#else
+    virtual raft::kstatus::value_t compute(raft::StreamingData &dataIn,
+                                           raft::StreamingData &bufOut) {
+        vertex_iterator vit = g_.find_vertex(vid);
+        bufOut.push(vit);
+        if (g_.num_vertices() <= ++vid) {
+            if (repetition <= ++rep) {
+                return raft::kstatus::stop;
+            }
+            vid = 0;
+        }
+        return raft::kstatus::proceed;
+    }
+    virtual bool pop(raft::Task *task, bool dryrun) { return true; }
+    virtual bool allocate(raft::Task *task, bool dryrun) { return true; }
+#endif
     graph_t& g_;
     uint64_t vid;
+    size_t rep;
 };
 
 //==============================================================//
 void arg_init(argument_parser & arg)
 {
     arg.add_arg("maxiter","0","maximum loop iteration (0-unlimited, only set for simulation purpose)");
+    arg.add_arg("repetition","1","repetition on the same graph");
+    arg.add_arg("runnum","1","run per graph load");
 }
 //==============================================================//
 size_t get_intersect_cnt(vector<size_t>& setA, vector<size_t>& setB)
@@ -356,8 +454,8 @@ void parallel_workset_init(graph_t&g, vector<unsigned>& workset, unsigned thread
     
 }
 
-size_t parallel_triangle_count(graph_t& g, unsigned threadnum, vector<unsigned>& workset, 
-        gBenchPerf_multi & perf, int perf_group)
+size_t parallel_triangle_count(graph_t& g, unsigned threadnum,
+        vector<unsigned>& workset, gBenchPerf_multi & perf, int perf_group)
 {
     // UNUSED(workset);
     // UNUSED(perf);
@@ -371,11 +469,18 @@ size_t parallel_triangle_count(graph_t& g, unsigned threadnum, vector<unsigned>&
     lookup_kernel lookup_k(g);
     count_kernel count_k;
 
-    raft::map m;
+    raft::DAG dag;
 
-    m += workset_k <= lookup_k >> count_k >= reduce_k;
+#if RAFTLIB_ORIG
+    dag += workset_k <= lookup_k >> count_k >= reduce_k;
+#else
+    dag += workset_k >> lookup_k * threadnum >> count_k * threadnum >>
+        reduce_k;
+#endif
 
-    m.exe< partition_dummy,
+    dag.exe<
+#if RAFTLIB_ORIG
+        partition_dummy,
 #if USE_UT or USE_QTHREAD
         pool_schedule,
 #else
@@ -388,7 +493,19 @@ size_t parallel_triangle_count(graph_t& g, unsigned threadnum, vector<unsigned>&
 #else
         dynalloc,
 #endif
-        no_parallel >();
+        no_parallel
+#else // NOT( RAFTLIB_ORIG )
+#if RAFTLIB_MIX
+        raft::RuntimeMix
+#elif RAFTLIB_ONESHOT
+        raft::RuntimeNewBurst
+#elif RAFTLIB_CV
+        raft::RuntimeFIFOCV
+#else
+        raft::RuntimeFIFO
+#endif
+#endif // RAFTLIB_ORIG
+            >();
 
     for (size_t vid = 0; g.num_vertices() > vid; ++vid) {
         cnts[vid] /= 2;
@@ -439,8 +556,11 @@ int main(int argc, char * argv[])
         return -1;
     }
     string path, separator;
+    unsigned arg_run_num;
     arg.get_value("dataset",path);
     arg.get_value("separator",separator);
+    arg.get_value("repetition",repetition);
+    arg.get_value("runnum",arg_run_num);
 
     size_t threadnum;
     arg.get_value("threadnum",threadnum);
@@ -494,20 +614,26 @@ int main(int argc, char * argv[])
 
     gBenchPerf_multi perf_multi(threadnum, perf);
     unsigned run_num = ceil(perf.get_event_cnt() /(double) DEFAULT_PERF_GRP_SZ);
-    if (run_num==0) run_num = 1;
+    if (run_num==0) run_num = arg_run_num;
     double elapse_time = 0;
     
 #ifndef NOGEM5
     m5_reset_stats(0, 0);
 #endif
+
+
     for (unsigned i=0;i<run_num;i++)
     {
         t1 = timer::get_usec();
 
+        const uint64_t beg_tsc = rdtsc();
         if (threadnum==1)
             tcount = triangle_count(graph, perf, i);
         else
             tcount = parallel_triangle_count(graph, threadnum, workset, perf_multi, i);
+        const uint64_t end_tsc = rdtsc();
+        cout << (end_tsc - beg_tsc) << " ticks elapsed\n";
+
         t2 = timer::get_usec();
 
         elapse_time += t2 - t1;
@@ -516,6 +642,7 @@ int main(int argc, char * argv[])
 #ifndef NOGEM5
     m5_dump_reset_stats(0, 0);
 #endif
+
     cout<<"== total triangle count: "<<tcount<<endl;
 #ifndef ENABLE_VERIFY
     cout<<"== time: "<<elapse_time/run_num<<" sec\n";

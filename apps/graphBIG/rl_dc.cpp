@@ -9,6 +9,10 @@
 #include "omp.h"
 #include <raft>
 
+#if RAFTLIB_ORIG
+#include "raftlib_orig.hpp"
+#endif
+
 #ifdef SIM
 #include "SIM.h"
 #endif
@@ -16,11 +20,14 @@
 #include "HMC.h"
 #endif
 
+#include "timing.h"
+
 #ifndef NOGEM5
 #include "gem5/m5ops.h"
 #endif
 
 using namespace std;
+size_t repetition = 0;
 size_t beginiter = 0;
 size_t enditer = 0;
 
@@ -46,62 +53,55 @@ typedef graph_t::vertex_iterator    vertex_iterator;
 typedef graph_t::edge_iterator      edge_iterator;
 
 //====================RaftLib Structures========================//
-struct reduction_msg
-{
-    int16_t* pcount; // pointer to vertex_property.indegree
-    int16_t cnt; // count of in-coming edges to add to *pcount
-};
 
-class reduce_kernel : public raft::parallel_k
+class dc_kernel : public raft::Kernel
 {
 public:
-    reduce_kernel(int dc_num) : raft::parallel_k() {
-        for (int i = 0; dc_num > i; ++i) {
-            addPortTo<struct reduction_msg>(input);
-        }
-    }
-    virtual raft::kstatus run() {
-        for (auto& port : input) {
-            if (0 < port.size()) {
-                auto& msg(port.template peek<struct reduction_msg>());
-                *msg.pcount += msg.cnt;
-                port.recycle(1);
-            }
-        }
-        return raft::proceed;
-    }
-};
-
-class dc_kernel : public raft::kernel
-{
-public:
-    dc_kernel(graph_t& g) : raft::kernel(), g_(g) {
-        input.addPort<vertex_iterator>("input");
-        output.addPort<struct reduction_msg>("output");
-    }
-    dc_kernel(const dc_kernel& other) : raft::kernel(), g_(other.g_) {
-        input.addPort<vertex_iterator>("input");
-        output.addPort<struct reduction_msg>("output");
+    dc_kernel(graph_t& g) : raft::Kernel(), g_(g) {
+        add_input<vertex_iterator>("input"_port);
     }
     ~dc_kernel() = default;
+#if RAFTLIB_ORIG
+    dc_kernel(const dc_kernel& other) : raft::Kernel(), g_(other.g_) {
+        add_input<vertex_iterator>("input"_port);
+    }
+    CLONE(); // enable cloning
     virtual raft::kstatus run() {
         // run degree count now
-        vertex_iterator& vit(input["input"].peek<vertex_iterator>());
-
+        vertex_iterator& vit(input["input"_port].peek<vertex_iterator>());
+        update_degree(vit);
+        input["input"_port].recycle();
+        return raft::proceed;
+    }
+#else
+    virtual raft::kstatus::value_t compute(raft::StreamingData &dataIn,
+                                           raft::StreamingData &bufOut) {
+        // run degree count now
+        vertex_iterator& vit(dataIn.peek<vertex_iterator>());
+        update_degree(vit);
+        dataIn.recycle();
+        return raft::kstatus::proceed;
+    }
+    virtual bool pop(raft::Task *task, bool dryrun) { return true; }
+    virtual bool allocate(raft::Task *task, bool dryrun) { return true; }
+#endif
+private:
+    void update_degree(vertex_iterator& vit)
+    {
         // out degree
         vit->property().outdegree = vit->edges_size();
 
         for (edge_iterator eit=vit->edges_begin();eit!=vit->edges_end();eit++) 
         {
             vertex_iterator vit_targ = g_.find_vertex(eit->target());
-            output["output"].template push<struct reduction_msg>(
-                    {&(vit_targ->property().indegree), 1});
+#if __GNUC__
+            __atomic_add_fetch(&vit_targ->property().indegree, 1,
+                               __ATOMIC_RELAXED);
+#else
+            vit_targ->property().indegree++;
+#endif
         }
-        input["input"].recycle();
-        return raft::proceed;
     }
-    CLONE(); // enable cloning
-private:
     graph_t& g_;
 };
 
@@ -109,28 +109,59 @@ class workset_kernel : public raft::parallel_k
 {
 public:
     workset_kernel(graph_t& g, int dc_num) : raft::parallel_k(), g_(g) {
+#if RAFTLIB_ORIG
         for (int i = 0; dc_num > i; ++i) {
             addPortTo<vertex_iterator>(output);
         }
+#else
+        add_output<vertex_iterator>("0"_port);
+#endif
         vid = 0;
+        rep = 0;
     }
+#if RAFTLIB_ORIG
     virtual raft::kstatus run() {
         for (auto& port : output) {
             if (port.space_avail()) {
                 vertex_iterator vit = g_.find_vertex(vid);
                 port.push(vit);
                 if (g_.num_vertices() <= ++vid) {
-                    return raft::stop;
+                    if (repetition <= ++rep) {
+                        return raft::kstatus::stop;
+                    }
+                    vid = 0;
                 }
             }
         }
-        return raft::proceed;
+        return raft::kstatus::proceed;
     }
+#else
+    virtual raft::kstatus::value_t compute(raft::StreamingData &dataIn,
+                                           raft::StreamingData &bufOut) {
+        vertex_iterator vit = g_.find_vertex(vid);
+        bufOut.push(vit);
+        if (g_.num_vertices() <= ++vid) {
+            if (repetition <= ++rep) {
+                return raft::kstatus::stop;
+            }
+            vid = 0;
+        }
+        return raft::kstatus::proceed;
+    }
+    virtual bool pop(raft::Task *task, bool dryrun) { return true; }
+    virtual bool allocate(raft::Task *task, bool dryrun) { return true; }
+#endif
     graph_t& g_;
     uint64_t vid;
+    size_t rep;
 };
 
 //==============================================================//
+void arg_init(argument_parser & arg)
+{
+    arg.add_arg("repetition","1","repetition on the same graph");
+    arg.add_arg("runnum","1","run per graph load");
+}
 
 //==============================================================//
 void dc(graph_t& g, gBenchPerf_event & perf, int perf_group) 
@@ -164,14 +195,19 @@ void parallel_dc(graph_t& g, unsigned threadnum, gBenchPerf_multi & perf, int pe
     // UNUSED(perf);
     // UNUSED(perf_group);
     workset_kernel workset_k(g, threadnum);
-    reduce_kernel reduce_k(threadnum);
     dc_kernel dc_k(g);
 
-    raft::map m;
+    raft::DAG dag;
 
-    m += workset_k <= dc_k >= reduce_k;
+#if RAFTLIB_ORIG
+    dag += workset_k <= dc_k;
+#else
+    dag += workset_k >> dc_k * threadnum;
+#endif
 
-    m.exe< partition_dummy,
+    dag.exe<
+#if RAFTLIB_ORIG
+        partition_dummy,
 #if USE_UT or USE_QTHREAD
         pool_schedule,
 #else
@@ -184,7 +220,19 @@ void parallel_dc(graph_t& g, unsigned threadnum, gBenchPerf_multi & perf, int pe
 #else
         dynalloc,
 #endif
-        no_parallel >();
+        no_parallel
+#else // NOT( RAFTLIB_ORIG )
+#if RAFTLIB_MIX
+        raft::RuntimeMix
+#elif RAFTLIB_ONESHOT
+        raft::RuntimeNewBurst
+#elif RAFTLIB_CV
+        raft::RuntimeFIFOCV
+#else
+        raft::RuntimeFIFO
+#endif
+#endif // RAFTLIB_ORIG
+            >();
 
     for (unsigned i = 0; threadnum > i; ++i) {
         perf.stop(i, perf_group);
@@ -244,14 +292,18 @@ int main(int argc, char * argv[])
 
     argument_parser arg;
     gBenchPerf_event perf;
+    arg_init(arg);
     if (arg.parse(argc,argv,perf,false)==false)
     {
         arg.help();
         return -1;
     }
     string path, separator;
+    unsigned arg_run_num;
     arg.get_value("dataset",path);
     arg.get_value("separator",separator);
+    arg.get_value("repetition",repetition);
+    arg.get_value("runnum",arg_run_num);
 
     size_t threadnum;
     arg.get_value("threadnum",threadnum);
@@ -289,7 +341,7 @@ int main(int argc, char * argv[])
 
     gBenchPerf_multi perf_multi(threadnum, perf);
     unsigned run_num = ceil(perf.get_event_cnt() / (double)DEFAULT_PERF_GRP_SZ);
-    if (run_num==0) run_num = 1;
+    if (run_num==0) run_num = arg_run_num;
     double elapse_time = 0;
     
 #ifndef NOGEM5
@@ -300,10 +352,13 @@ int main(int argc, char * argv[])
         // Degree Centrality
         t1 = timer::get_usec();
         
+        const uint64_t beg_tsc = rdtsc();
         if (threadnum==1)
             dc(graph, perf, i);
         else
             parallel_dc(graph, threadnum, perf_multi, i);
+        const uint64_t end_tsc = rdtsc();
+        cout << (end_tsc - beg_tsc) << " ticks elapsed\n";
 
         t2 = timer::get_usec();
         elapse_time += t2-t1;

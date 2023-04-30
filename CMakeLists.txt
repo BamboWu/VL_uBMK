@@ -39,9 +39,7 @@ find_package(QThread QUIET)
 find_package(UT QUIET)
 find_package(RaftLib QUIET)
 
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-#set(CMAKE_CXX_EXTENSIONS OFF)
+include(CheckSTD)
 
 execute_process(COMMAND grep -l 'rdtscp' /proc/cpuinfo
     OUTPUT_VARIABLE CPU_HAS_RDTSCP)

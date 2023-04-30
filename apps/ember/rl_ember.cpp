@@ -129,7 +129,7 @@ private:
 
   MsgPtr genmsg(std::size_t i) {
     long sleep_tmp =
-        ((i % burst_period) > slow_period) ? -burst_amp : burst_amp;
+        (((long)i % burst_period) > slow_period) ? -burst_amp : burst_amp;
     sleep_tmp += sleep_nsec2;
     if (0 < sleep_tmp) {
       nopcompute(sleep_tmp);

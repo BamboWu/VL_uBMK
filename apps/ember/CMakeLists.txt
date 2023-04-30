@@ -109,15 +109,11 @@ endif()
 if (NOT RaftLib_FOUND)
   MESSAGE(STATUS "WARNING: No RaftLib found, skip outcast/incast_rl.")
 else (NOT RaftLib_FOUND)
+  add_custom_target(ember_qt)
+  add_custom_target(ember_ut)
   if (NOT QTHREAD_FOUND)
     MESSAGE(STATUS "WARNING: No qthread found, skip outcast/incast_qt.")
   else (NOT QTHREAD_FOUND)
-    add_raftbenchmark(incast_qt_std_orig rl_ember.cpp)
-    target_compile_definitions(incast_qt_std_orig PRIVATE -DRAFTLIB_ORIG=1
-        -DUSE_QTHREAD=1 -DSTDALLOC=1 -DEMBER_INCAST=1)
-    add_raftbenchmark(incast_qt_dyn_orig rl_ember.cpp)
-    target_compile_definitions(incast_qt_dyn_orig PRIVATE -DRAFTLIB_ORIG=1
-        -DUSE_QTHREAD=1 -DEMBER_INCAST=1)
     add_raftbenchmark(incast_qt_std_pw rl_ember.cpp)
     target_compile_definitions(incast_qt_std_pw PRIVATE -DUSE_QTHREAD=1
         -DEMBER_INCAST=1)
@@ -134,26 +130,30 @@ else (NOT RaftLib_FOUND)
     target_compile_definitions(incast_qt_dyn_mix PRIVATE -DUSE_QTHREAD=1
         -DRAFTLIB_MIX=1 -DARMQ_DYNAMIC_ALLOC=1 -DEMBER_INCAST=1)
     add_custom_target(incast_qt)
-    add_dependencies(incast_qt incast_qt_std_orig incast_qt_dyn_orig
+    add_dependencies(incast_qt
                      incast_qt_std_pw incast_qt_dyn_pw incast_qt_std_os
                      incast_qt_std_mix incast_qt_dyn_mix)
-    if (NOT VL_FOUND)
-      MESSAGE(STATUS "WARNING: No libvl found, skip incast_qt_vl.")
-    else()
-      add_raftbenchmark(incast_qt_vl_orig rl_ember.cpp)
-      target_compile_definitions(incast_qt_vl_orig PRIVATE -DRAFTLIB_ORIG=1
-          -DUSE_QTHREAD=1 -DVL=1 -DEMBER_INCAST=1)
-      target_link_libraries(incast_qt_vl_orig ${VL_LIBRARY})
-      add_dependencies(incast_qt incast_qt_vl_orig)
-    endif()
+    add_dependencies(ember_qt incast_qt)
+    if (NOT COMPILER_SUPPORTS_CXX20)
+      MESSAGE(STATUS "WARNING: No C++20 support, skip incast_qt_*_orig")
+    else (NOT COMPILER_SUPPORTS_CXX20)
+      add_raftbenchmark(incast_qt_std_orig rl_ember.cpp)
+      target_compile_definitions(incast_qt_std_orig PRIVATE -DRAFTLIB_ORIG=1
+          -DUSE_QTHREAD=1 -DSTDALLOC=1 -DEMBER_INCAST=1)
+      add_raftbenchmark(incast_qt_dyn_orig rl_ember.cpp)
+      target_compile_definitions(incast_qt_dyn_orig PRIVATE -DRAFTLIB_ORIG=1
+          -DUSE_QTHREAD=1 -DEMBER_INCAST=1)
+      if (NOT VL_FOUND)
+        MESSAGE(STATUS "WARNING: No libvl found, skip incast_qt_vl_orig.")
+      else()
+        add_raftbenchmark(incast_qt_vl_orig rl_ember.cpp)
+        target_compile_definitions(incast_qt_vl_orig PRIVATE -DRAFTLIB_ORIG=1
+            -DUSE_QTHREAD=1 -DVL=1 -DEMBER_INCAST=1)
+        target_link_libraries(incast_qt_vl_orig ${VL_LIBRARY})
+      endif()
+    endif (NOT COMPILER_SUPPORTS_CXX20)
 
     #outcast
-    add_raftbenchmark(outcast_qt_std_orig rl_ember.cpp)
-    target_compile_definitions(outcast_qt_std_orig PRIVATE -DRAFTLIB_ORIG=1
-        -DUSE_QTHREAD=1 -DSTDALLOC=1)
-    add_raftbenchmark(outcast_qt_dyn_orig rl_ember.cpp)
-    target_compile_definitions(outcast_qt_dyn_orig PRIVATE -DRAFTLIB_ORIG=1
-        -DUSE_QTHREAD=1)
     add_raftbenchmark(outcast_qt_std_pw rl_ember.cpp)
     target_compile_definitions(outcast_qt_std_pw PRIVATE -DUSE_QTHREAD=1)
     add_raftbenchmark(outcast_qt_dyn_pw rl_ember.cpp)
@@ -169,30 +169,34 @@ else (NOT RaftLib_FOUND)
     target_compile_definitions(outcast_qt_dyn_mix PRIVATE -DUSE_QTHREAD=1
         -DRAFTLIB_MIX=1 -DARMQ_DYNAMIC_ALLOC=1)
     add_custom_target(outcast_qt)
-    add_dependencies(outcast_qt outcast_qt_std_orig outcast_qt_dyn_orig
+    add_dependencies(outcast_qt
                      outcast_qt_std_pw outcast_qt_dyn_pw outcast_qt_std_os
                      outcast_qt_std_mix outcast_qt_dyn_mix)
-    if (NOT VL_FOUND)
-      MESSAGE(STATUS "WARNING: No libvl found, skip outcast_qt_vl.")
-    else()
-      add_raftbenchmark(outcast_qt_vl_orig rl_ember.cpp)
-      target_compile_definitions(outcast_qt_vl_orig PRIVATE -DRAFTLIB_ORIG=1
-          -DUSE_QTHREAD=1 -DVL=1)
-      target_link_libraries(outcast_qt_vl_orig ${VL_LIBRARY})
-      add_dependencies(outcast_qt outcast_qt_vl_orig)
-    endif()
+    add_dependencies(ember_qt outcast_qt)
+    if (NOT COMPILER_SUPPORTS_CXX20)
+      MESSAGE(STATUS "WARNING: No C++20 support, skip outcast_qt_*_orig")
+    else (NOT COMPILER_SUPPORTS_CXX20)
+      add_raftbenchmark(outcast_qt_std_orig rl_ember.cpp)
+      target_compile_definitions(outcast_qt_std_orig PRIVATE -DRAFTLIB_ORIG=1
+          -DUSE_QTHREAD=1 -DSTDALLOC=1)
+      add_raftbenchmark(outcast_qt_dyn_orig rl_ember.cpp)
+      target_compile_definitions(outcast_qt_dyn_orig PRIVATE -DRAFTLIB_ORIG=1
+          -DUSE_QTHREAD=1)
+      if (NOT VL_FOUND)
+        MESSAGE(STATUS "WARNING: No libvl found, skip outcast_qt_vl_orig.")
+      else()
+        add_raftbenchmark(outcast_qt_vl_orig rl_ember.cpp)
+        target_compile_definitions(outcast_qt_vl_orig PRIVATE -DRAFTLIB_ORIG=1
+            -DUSE_QTHREAD=1 -DVL=1)
+        target_link_libraries(outcast_qt_vl_orig ${VL_LIBRARY})
+      endif()
+    endif (NOT COMPILER_SUPPORTS_CXX20)
 
   endif(NOT QTHREAD_FOUND)
 
   if (NOT UT_FOUND)
     MESSAGE(STATUS "WARNING: No libut found, skip outcast/incast_ut.")
   else (NOT UT_FOUND)
-    add_raftbenchmark(incast_ut_std_orig rl_ember.cpp)
-    target_compile_definitions(incast_ut_std_orig PRIVATE -DRAFTLIB_ORIG=1
-        -DUSE_UT=1 -DSTDALLOC=1 -DEMBER_INCAST=1)
-    add_raftbenchmark(incast_ut_dyn_orig rl_ember.cpp)
-    target_compile_definitions(incast_ut_dyn_orig PRIVATE -DRAFTLIB_ORIG=1
-        -DUSE_UT=1 -DEMBER_INCAST=1)
     add_raftbenchmark(incast_ut_std_pw rl_ember.cpp)
     target_compile_definitions(incast_ut_std_pw PRIVATE -DUSE_UT=1
         -DEMBER_INCAST=1)
@@ -202,9 +206,6 @@ else (NOT RaftLib_FOUND)
     add_raftbenchmark(incast_ut_std_cv rl_ember.cpp)
     target_compile_definitions(incast_ut_std_cv PRIVATE -DUSE_UT=1
         -DRAFTLIB_CV=1 -DEMBER_INCAST=1)
-    add_raftbenchmark(incast_ut_dyn_cv rl_ember.cpp)
-    target_compile_definitions(incast_ut_dyn_cv PRIVATE -DUSE_UT=1
-        -DRAFTLIB_CV=1 -DARMQ_DYNAMIC_ALLOC=1 -DEMBER_INCAST=1)
     add_raftbenchmark(incast_ut_std_os rl_ember.cpp)
     target_compile_definitions(incast_ut_std_os PRIVATE -DUSE_UT=1
         -DRAFTLIB_ONESHOT=1 -DEMBER_INCAST=1)
@@ -215,27 +216,30 @@ else (NOT RaftLib_FOUND)
     target_compile_definitions(incast_ut_dyn_mix PRIVATE -DUSE_UT=1
         -DRAFTLIB_MIX=1 -DARMQ_DYNAMIC_ALLOC=1 -DEMBER_INCAST=1)
     add_custom_target(incast_ut)
-    add_dependencies(incast_ut incast_ut_std_orig incast_ut_dyn_orig
+    add_dependencies(incast_ut
                      incast_ut_std_pw incast_ut_dyn_pw incast_ut_std_cv
-                     incast_ut_dyn_cv incast_ut_std_os incast_ut_std_mix
-                     incast_ut_dyn_mix)
-    if (NOT VL_FOUND)
-      MESSAGE(STATUS "WARNING: No libvl found, skip incast_ut_vl.")
-    else()
-      add_raftbenchmark(incast_ut_vl_orig rl_ember.cpp)
-      target_compile_definitions(incast_ut_vl_orig PRIVATE -DRAFTLIB_ORIG=1
-          -DUSE_UT=1 -DVL=1 -DEMBER_INCAST=1)
-      target_link_libraries(incast_ut_vl_orig ${VL_LIBRARY})
-      add_dependencies(incast_ut incast_ut_vl_orig)
-    endif()
+                     incast_ut_std_os incast_ut_std_mix incast_ut_dyn_mix)
+    add_dependencies(ember_ut incast_ut)
+    if (NOT COMPILER_SUPPORTS_CXX20)
+      MESSAGE(STATUS "WARNING: No C++20 support, skip incast_ut_*_orig")
+    else (NOT COMPILER_SUPPORTS_CXX20)
+      add_raftbenchmark(incast_ut_std_orig rl_ember.cpp)
+      target_compile_definitions(incast_ut_std_orig PRIVATE -DRAFTLIB_ORIG=1
+          -DUSE_UT=1 -DSTDALLOC=1 -DEMBER_INCAST=1)
+      add_raftbenchmark(incast_ut_dyn_orig rl_ember.cpp)
+      target_compile_definitions(incast_ut_dyn_orig PRIVATE -DRAFTLIB_ORIG=1
+          -DUSE_UT=1 -DEMBER_INCAST=1)
+      if (NOT VL_FOUND)
+        MESSAGE(STATUS "WARNING: No libvl found, skip incast_ut_vl.")
+      else()
+        add_raftbenchmark(incast_ut_vl_orig rl_ember.cpp)
+        target_compile_definitions(incast_ut_vl_orig PRIVATE -DRAFTLIB_ORIG=1
+            -DUSE_UT=1 -DVL=1 -DEMBER_INCAST=1)
+        target_link_libraries(incast_ut_vl_orig ${VL_LIBRARY})
+      endif()
+    endif (NOT COMPILER_SUPPORTS_CXX20)
 
     #outcast
-    add_raftbenchmark(outcast_ut_std_orig rl_ember.cpp)
-    target_compile_definitions(outcast_ut_std_orig PRIVATE -DRAFTLIB_ORIG=1
-        -DUSE_UT=1 -DSTDALLOC=1)
-    add_raftbenchmark(outcast_ut_dyn_orig rl_ember.cpp)
-    target_compile_definitions(outcast_ut_dyn_orig PRIVATE -DRAFTLIB_ORIG=1
-        -DUSE_UT=1)
     add_raftbenchmark(outcast_ut_std_pw rl_ember.cpp)
     target_compile_definitions(outcast_ut_std_pw PRIVATE -DUSE_UT=1)
     add_raftbenchmark(outcast_ut_dyn_pw rl_ember.cpp)
@@ -244,9 +248,6 @@ else (NOT RaftLib_FOUND)
     add_raftbenchmark(outcast_ut_std_cv rl_ember.cpp)
     target_compile_definitions(outcast_ut_std_cv PRIVATE -DUSE_UT=1
         -DRAFTLIB_CV=1)
-    add_raftbenchmark(outcast_ut_dyn_cv rl_ember.cpp)
-    target_compile_definitions(outcast_ut_dyn_cv PRIVATE -DUSE_UT=1
-        -DRAFTLIB_CV=1 -DARMQ_DYNAMIC_ALLOC=1)
     add_raftbenchmark(outcast_ut_std_os rl_ember.cpp)
     target_compile_definitions(outcast_ut_std_os PRIVATE -DUSE_UT=1
         -DRAFTLIB_ONESHOT=1)
@@ -257,18 +258,27 @@ else (NOT RaftLib_FOUND)
     target_compile_definitions(outcast_ut_dyn_mix PRIVATE -DUSE_UT=1
         -DRAFTLIB_MIX=1 -DARMQ_DYNAMIC_ALLOC=1)
     add_custom_target(outcast_ut)
-    add_dependencies(outcast_ut outcast_ut_std_orig outcast_ut_dyn_orig
+    add_dependencies(outcast_ut
                      outcast_ut_std_pw outcast_ut_dyn_pw outcast_ut_std_cv
-                     outcast_ut_dyn_cv outcast_ut_std_os outcast_ut_std_mix
-                     outcast_ut_dyn_mix)
-    if (NOT VL_FOUND)
-      MESSAGE(STATUS "WARNING: No libvl found, skip outcast_ut_vl.")
-    else()
-      add_raftbenchmark(outcast_ut_vl_orig rl_ember.cpp)
-      target_compile_definitions(outcast_ut_vl_orig PRIVATE -DRAFTLIB_ORIG=1
-          -DUSE_UT=1 -DVL=1)
-      target_link_libraries(outcast_ut_vl_orig ${VL_LIBRARY})
-      add_dependencies(outcast_ut outcast_ut_vl_orig)
-    endif()
+                     outcast_ut_std_os outcast_ut_std_mix outcast_ut_dyn_mix)
+    add_dependencies(ember_ut outcast_ut)
+    if (NOT COMPILER_SUPPORTS_CXX20)
+      MESSAGE(STATUS "WARNING: No C++20 support, skip outcast_ut_*_orig")
+    else (NOT COMPILER_SUPPORTS_CXX20)
+      add_raftbenchmark(outcast_ut_std_orig rl_ember.cpp)
+      target_compile_definitions(outcast_ut_std_orig PRIVATE -DRAFTLIB_ORIG=1
+          -DUSE_UT=1 -DSTDALLOC=1)
+      add_raftbenchmark(outcast_ut_dyn_orig rl_ember.cpp)
+      target_compile_definitions(outcast_ut_dyn_orig PRIVATE -DRAFTLIB_ORIG=1
+          -DUSE_UT=1)
+      if (NOT VL_FOUND)
+        MESSAGE(STATUS "WARNING: No libvl found, skip outcast_ut_vl_orig.")
+      else()
+        add_raftbenchmark(outcast_ut_vl_orig rl_ember.cpp)
+        target_compile_definitions(outcast_ut_vl_orig PRIVATE -DRAFTLIB_ORIG=1
+            -DUSE_UT=1 -DVL=1)
+        target_link_libraries(outcast_ut_vl_orig ${VL_LIBRARY})
+      endif()
+    endif (NOT COMPILER_SUPPORTS_CXX20)
   endif(NOT UT_FOUND)
 endif()

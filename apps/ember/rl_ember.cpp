@@ -30,7 +30,7 @@ struct MsgPtr {
     msg = nullptr;
   }
   MsgPtr(double *ptr) : msg(ptr) {}
-  MsgPtr(const MsgPtr &other) : msg(other.msg) {}
+  MsgPtr(const MsgPtr &other) = default;
   double *msg;
 };
 
@@ -100,9 +100,12 @@ public:
 
   virtual raft::kstatus run() {
     for (auto &port : (this)->output) {
+#if STDALLOC
       if (!port.space_avail()) {
         continue;
       }
+#else /* let dynalloc trigger resize */
+#endif
       auto i(cnt.fetch_add(1, std::memory_order_relaxed));
       port.push(genmsg(i));
       if (repeats < i) {

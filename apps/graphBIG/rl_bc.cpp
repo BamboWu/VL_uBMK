@@ -79,6 +79,15 @@ struct reduction_msg
     mutex* pmu;
 #endif
     double update;
+    reduction_msg() = default;
+    reduction_msg(const reduction_msg &other) = default;
+#if ! RAFTLIB_ORIG
+    reduction_msg(double* pbc_, mutex* pmu_, double update_) :
+        pbc(pbc_), pmu(pmu_), update(update_) {}
+#else
+    reduction_msg(double* pbc_, double update_) :
+        pbc(pbc_), update(update_) {}
+#endif
 };
 
 class reduce_kernel : public raft::parallel_k
@@ -253,14 +262,18 @@ public:
 #if RAFTLIB_ORIG
     virtual raft::kstatus run() {
         for (auto& port : output) {
-            if (port.space_avail()) {
-                port.push(vid);
-                if (0 == vid--) {
-                    if (repetition <= ++rep) {
-                        return raft::kstatus::stop;
-                    }
-                    vid = max_vid;
+#if STDALLOC
+            if (!port.space_avail()) {
+                continue;
+            }
+#else /* let dynalloc trigger resize */
+#endif
+            port.push(vid);
+            if (0 == vid--) {
+                if (repetition <= ++rep) {
+                    return raft::kstatus::stop;
                 }
+                vid = max_vid;
             }
         }
         return raft::kstatus::proceed;

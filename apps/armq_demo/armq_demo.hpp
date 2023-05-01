@@ -43,11 +43,7 @@ struct Chunk
 {
     Chunk() = default;
 
-    Chunk( const Chunk &other )
-    {
-        (this)->buf = other.buf;
-        (this)->seqnum = other.seqnum;
-    }
+    Chunk( const Chunk &other ) = default;
     std::size_t *buf;
     std::size_t seqnum;
 };
@@ -142,10 +138,13 @@ public:
 #if RAFTLIB_ORIG
         for( auto &port : (this)->output )
         {
+#if STDALLOC
             if( ! port.space_avail() )
             {
                 continue;
             }
+#else /* let dynalloc trigger resize */
+#endif
             port.push( rep );
 #else
             bufOut.push( rep );

@@ -68,8 +68,7 @@ struct intersect_msg
     vector<size_t> *src_set;
     vector<size_t> *dst_set;
     intersect_msg() = default;
-    intersect_msg(const intersect_msg& rhs) : src(rhs.src), dst(rhs.dst),
-        src_set(rhs.src_set), dst_set(rhs.dst_set) {}
+    intersect_msg(const intersect_msg& rhs) = default;
     intersect_msg(size_t s, size_t d, vector<size_t>& sset,
             vector<size_t>& dset) :
         src(s), dst(d), src_set(&sset), dst_set(&dset) {}
@@ -79,6 +78,9 @@ struct reduction_msg
     size_t src; // src vertex
     size_t dst; // dst vertex
     int16_t cnt; // count of triangles to add to *pcount
+    reduction_msg() = default;
+    reduction_msg(const reduction_msg& rhs) = default;
+    reduction_msg(size_t s, size_t d, int16_t c) : src(s), dst(d), cnt(c) {}
 };
 
 class reduce_kernel : public raft::parallel_k
@@ -243,15 +245,19 @@ public:
 #if RAFTLIB_ORIG
     virtual raft::kstatus run() {
         for (auto& port : output) {
-            if (port.space_avail()) {
-                vertex_iterator vit = g_.find_vertex(vid);
-                port.push(vit);
-                if (g_.num_vertices() <= ++vid) {
-                    if (repetition <= ++rep) {
-                        return raft::kstatus::stop;
-                    }
-                    vid = 0;
+#if STDALLOC
+            if (!port.space_avail()) {
+                continue;
+            }
+#else /* let dynalloc trigger resize */
+#endif
+            vertex_iterator vit = g_.find_vertex(vid);
+            port.push(vit);
+            if (g_.num_vertices() <= ++vid) {
+                if (repetition <= ++rep) {
+                    return raft::kstatus::stop;
                 }
+                vid = 0;
             }
         }
         return raft::kstatus::proceed;

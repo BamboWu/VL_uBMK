@@ -122,15 +122,19 @@ public:
 #if RAFTLIB_ORIG
     virtual raft::kstatus run() {
         for (auto& port : output) {
-            if (port.space_avail()) {
-                vertex_iterator vit = g_.find_vertex(vid);
-                port.push(vit);
-                if (g_.num_vertices() <= ++vid) {
-                    if (repetition <= ++rep) {
-                        return raft::kstatus::stop;
-                    }
-                    vid = 0;
+#if STDALLOC
+            if (!port.space_avail()) {
+                continue;
+            }
+#else /* let dynalloc trigger resize */
+#endif
+            vertex_iterator vit = g_.find_vertex(vid);
+            port.push(vit);
+            if (g_.num_vertices() <= ++vid) {
+                if (repetition <= ++rep) {
+                    return raft::kstatus::stop;
                 }
+                vid = 0;
             }
         }
         return raft::kstatus::proceed;

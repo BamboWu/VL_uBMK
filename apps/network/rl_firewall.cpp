@@ -26,7 +26,7 @@ struct PktPtr {
     pkt = nullptr;
   }
   PktPtr(Packet *the_pkt) : pkt(the_pkt) {}
-  PktPtr(const PktPtr &other) : pkt(other.pkt) {}
+  PktPtr(const PktPtr &other) = default;
   Packet *pkt;
 };
 
@@ -58,9 +58,12 @@ public:
 #if RAFTLIB_ORIG
   virtual raft::kstatus run() {
     for (auto &port : (this)->output) {
+#if STDALLOC
       if (!port.space_avail()) {
         continue;
       }
+#else /* let dynalloc trigger resize */
+#endif
       port.push(genpkt());
       if (npackets < ++cnt) {
         return raft::kstatus::stop;

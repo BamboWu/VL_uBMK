@@ -14,6 +14,11 @@
 #include <vector>
 #include <list>
 #include <raft>
+#include <chrono>
+
+using std::chrono::high_resolution_clock;
+using std::chrono::duration_cast;
+using std::chrono::nanoseconds;
 
 #if ! RAFTLIB_ORIG
 #include <mutex>
@@ -556,12 +561,16 @@ int main(int argc, char * argv[])
         t1 = timer::get_usec();
 
         const uint64_t beg_tsc = rdtsc();
+        const auto beg( high_resolution_clock::now() );
         if (threadnum==1)
             bc(graph,undirected,perf,i);
         else
             parallel_bc(graph,threadnum,undirected,perf_multi,i);
         const uint64_t end_tsc = rdtsc();
-        cout << (end_tsc - beg_tsc) << " ticks elapsed\n";
+        const auto end( high_resolution_clock::now() );
+        const auto elapsed( duration_cast< nanoseconds >( end - beg ) );
+        std::cout << ( end_tsc - beg_tsc ) << " ticks elapsed\n";
+        std::cout << elapsed.count() << " ns elapsed\n";
 
         t2 = timer::get_usec();
         elapse_time += t2-t1;

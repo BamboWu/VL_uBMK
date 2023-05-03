@@ -73,7 +73,7 @@ public:
 
 protected:
 
-    void touch( Chunk &chunk, std::size_t nrounds, std::size_t nnops )
+    inline void touch( Chunk &chunk, std::size_t nrounds, std::size_t nnops )
     {
         std::size_t nop_rounds( nnops / nrounds / 10 );
         for( std::size_t i( 0 ); nrounds > i; ++i )
@@ -82,6 +82,7 @@ protected:
             // a chasing pointer pattern to create some cache pressure
             do
             {
+                chunk.buf[ pos + 1 ] = chunk.buf[ pos ];
                 pos = chunk.buf[ pos ];
             } while( 0 != pos );
             // add a bit more work by nops
@@ -223,6 +224,11 @@ public:
 #endif
         chunk.buf = arrs[ seqnum % NUM_ARRS ];
         chunk.seqnum = seqnum;
+        for( std::size_t i( 0 ); size > i; ++i )
+        {
+            chunk.buf[ i * NVALS_PER_LINE + 1 ] =
+                chunk.buf[ i * NVALS_PER_LINE ];
+        }
         while( delay > ( rdtsc() - beg_tick ) )
         {
             /* busy doing nothing until delay reached */

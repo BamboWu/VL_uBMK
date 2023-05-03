@@ -32,7 +32,7 @@
 #include "raftlib_orig.hpp"
 #endif
 
-#define NUM_ARRS 10000
+#define NUM_ARRS 1000000
 #ifndef L1D_CACHE_LINE_SIZE
 #define L1D_CACHE_LINE_SIZE 64
 #endif
@@ -114,7 +114,7 @@ class Sequencer : public raft::Kernel
 {
 public:
     Sequencer( const std::size_t repetitions, int fanout ) :
-        raft::Kernel(), nreps( repetitions )
+        raft::Kernel(), nreps( repetitions ), nfanouts( fanout )
     {
 #if RAFTLIB_ORIG
         for( auto i( 0 ); fanout > i; ++i )
@@ -138,7 +138,11 @@ public:
     {
 #if RAFTLIB_ORIG
         for( auto &port : (this)->output )
+#else
+        for( int i( 0 ); nfanouts > i; ++i )
+#endif
         {
+#if RAFTLIB_ORIG
 #if STDALLOC
             if( ! port.space_avail() )
             {
@@ -147,16 +151,14 @@ public:
 #else /* let dynalloc trigger resize */
 #endif
             port.push( rep );
-#else
+#else /* RAFTLIB_ORIG */
             bufOut.push( rep );
 #endif
             if( nreps < ++rep )
             {
                 return( raft::kstatus::stop );
             }
-#if RAFTLIB_ORIG
         }
-#endif
         return( raft::kstatus::proceed );
     }
 
@@ -176,6 +178,7 @@ public:
 private:
     const std::size_t nreps;
     std::size_t rep;
+    int nfanouts;
 };
 
 class Generator : public ChunkProcessingKernel
@@ -364,7 +367,8 @@ class Copy : public ChunkProcessingKernel
 public:
     Copy( const std::size_t chunk_size,
           int fanin ) :
-        ChunkProcessingKernel( chunk_size )
+        ChunkProcessingKernel( chunk_size ),
+        nfanins( fanin )
     {
 #if RAFTLIB_ORIG
         for( auto i( 0 ); fanin > i; ++i )
@@ -380,6 +384,23 @@ public:
     virtual ~Copy() = default;
 
 #if RAFTLIB_ORIG
+    Copy( const Copy &other ) :
+        ChunkProcessingKernel( other.size ),
+        nfanins( other.nfanins )
+    {
+#if RAFTLIB_ORIG
+        for( auto i( 0 ); nfanins > i; ++i )
+        {
+            add_input< Chunk >( port_name_of_i( i ) );
+        }
+#else
+        add_input< Chunk >( "0"_port );
+#endif
+        add_output< Chunk >( "0"_port );
+    }
+
+    CLONE();
+
     virtual raft::kstatus run()
 #else
     virtual raft::kstatus::value_t compute( raft::StreamingData &dataIn,
@@ -405,6 +426,8 @@ public:
 #endif
         return( raft::kstatus::proceed );
     }
+
+    const int nfanins;
 };
 
 class Count : public ChunkProcessingKernel

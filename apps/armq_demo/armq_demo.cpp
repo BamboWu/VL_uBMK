@@ -100,7 +100,7 @@ main( int argc, char **argv )
         exit( EXIT_FAILURE );
     }
 
-#if DUPLICATE_FILTERS
+#if NO_FILTERS || DUPLICATE_FILTERS
     int F = G;
 #else
     int F = 1;
@@ -119,7 +119,10 @@ main( int argc, char **argv )
     raft::DAG dag;
 
 #if RAFTLIB_ORIG
-#if DUPLICATE_FILTERS
+#if NO_FILTERS
+    auto kernels( dag += seq <= gen >>
+                  *raft::kernel_maker< Copy >( S, 1 ) >= copy );
+#elif DUPLICATE_FILTERS
     auto kernels( dag += seq <= gen >> filter >= copy );
 #else
     auto kernels( dag += seq <= gen >= filter >> copy );
@@ -131,7 +134,14 @@ main( int argc, char **argv )
     }
     dag += kernels.getDst().first->get() >> count;
 #else
+#if NO_FILTERS
+    raft::Kpair *kpair( &( seq >>
+                           ( gen * G >>
+                             *( raft::kernel_maker< Copy >( S, 1 ) ) * F )
+                           >> copy ) );
+#else
     raft::Kpair *kpair( &( seq >> ( gen * G >> filter * F ) >> copy * 0 ) );
+#endif
     for( auto i( 1 ); C > i; ++i )
     {
         kpair = &( *kpair >>

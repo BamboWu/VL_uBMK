@@ -8,6 +8,7 @@ namespace raft
 using Kernel = raft::kernel;
 using DAG = raft::map;
 using port_name_t = raft::port_key_name_t;
+using FIFO = FIFO;
 }
 #define add_input input.addPort
 #define add_output output.addPort

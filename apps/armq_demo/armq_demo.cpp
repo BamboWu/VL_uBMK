@@ -32,7 +32,7 @@ using std::chrono::nanoseconds;
 
 #include "armq_demo.hpp"
 
-std::size_t *Generator::arrs[ NUM_ARRS ];
+std::size_t *Generator::flatted_arr;
 
 #if RAFTLIB_ORIG
 #include "raftlib_orig.hpp"
@@ -121,7 +121,7 @@ main( int argc, char **argv )
 #if RAFTLIB_ORIG
 #if NO_FILTERS
     auto kernels( dag += seq <= gen >>
-                  *raft::kernel_maker< Copy >( S, 1 ) >= copy );
+                  *raft::kernel_maker< Copy >( S, 1, rounds, nops ) >= copy );
 #elif DUPLICATE_FILTERS
     auto kernels( dag += seq <= gen >> filter >= copy );
 #else
@@ -137,7 +137,8 @@ main( int argc, char **argv )
 #if NO_FILTERS
     raft::Kpair *kpair( &( seq >>
                            ( gen * G >>
-                             *( raft::kernel_maker< Copy >( S, 1 ) ) * F )
+                             *( raft::kernel_maker< Copy >(
+                                     S, 1, rounds, nops ) ) * F )
                            >> copy ) );
 #else
     raft::Kpair *kpair( &( seq >> ( gen * G >> filter * F ) >> copy * 0 ) );

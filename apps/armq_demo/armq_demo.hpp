@@ -32,7 +32,7 @@
 #include "raftlib_orig.hpp"
 #endif
 
-#define NUM_ARRS 1000000
+#define NUM_CACHE_LINES 524288
 #ifndef L1D_CACHE_LINE_SIZE
 #define L1D_CACHE_LINE_SIZE 64
 #endif
@@ -54,6 +54,7 @@ public:
     ChunkProcessingKernel( const std::size_t chunk_size ) :
         raft::Kernel(), size( chunk_size )
     {
+        acc = 0;
     }
 
     virtual ~ChunkProcessingKernel() = default;
@@ -73,17 +74,25 @@ public:
 
 protected:
 
-    inline void touch( Chunk &chunk, std::size_t nrounds, std::size_t nnops )
+    inline void touch( Chunk &chunk,
+                       std::size_t nrounds,
+                       std::size_t nnops )
     {
-        std::size_t nop_rounds( nnops / nrounds / 10 );
+        std::size_t ans = 0;
+        std::size_t nop_rounds( nnops / 10 );
+        if( 0 != nrounds )
+        {
+            nop_rounds /= nrounds;
+        }
         for( std::size_t i( 0 ); nrounds > i; ++i )
         {
             std::size_t pos = 0;
             // a chasing pointer pattern to create some cache pressure
             do
             {
-                chunk.buf[ pos + 1 ] = chunk.buf[ pos ];
+                //chunk.buf[ pos + 1 ] = chunk.buf[ pos ];
                 pos = chunk.buf[ pos ];
+                ans += pos;
             } while( 0 != pos );
             // add a bit more work by nops
             for( std::size_t j( 0 ); nop_rounds > j; ++j )
@@ -105,9 +114,11 @@ protected:
                         : );
             }
         }
+        acc += ans;
     }
 
     const std::size_t size;
+    std::size_t acc;
 };
 
 class Sequencer : public raft::Kernel
@@ -225,7 +236,8 @@ public:
 #else
         auto &chunk( bufOut.allocate< Chunk >() );
 #endif
-        chunk.buf = arrs[ seqnum % NUM_ARRS ];
+        chunk.buf = &flatted_arr[
+            ( seqnum % ( NUM_CACHE_LINES / size ) ) * size * NVALS_PER_LINE ];
         chunk.seqnum = seqnum;
         for( std::size_t i( 0 ); size > i; ++i )
         {
@@ -247,8 +259,7 @@ public:
     static void populate( const std::size_t size )
     {
         srand( size );
-        std::size_t *flatted_arr =
-            new std::size_t[ NUM_ARRS * size * NVALS_PER_LINE ];
+        flatted_arr = new std::size_t[ NUM_CACHE_LINES * NVALS_PER_LINE ];
         std::size_t pos;
         // create a pool of offsets
         std::vector< std::size_t > offsets( size );
@@ -256,10 +267,10 @@ public:
         {
             offsets[ i ] = i;
         }
-        for( std::size_t i( 0 ); NUM_ARRS > i; ++i )
+        for( std::size_t i( 0 ); ( NUM_CACHE_LINES / size ) > i; ++i )
         {
             // make arrs[i] the shortcuts to the i-th segement
-            arrs[ i ] = &flatted_arr[ i * size * NVALS_PER_LINE ];
+            std::size_t *arrs_i = &flatted_arr[ i * size * NVALS_PER_LINE ];
 
             // populate the arrs[ i ] to form a chain
             pos = 0; // begin with position 0
@@ -271,13 +282,13 @@ public:
                     rand_idx = rand() % ( size - j );
                 } while( 0 == rand_idx || // do not point to 0
                          offsets[ rand_idx ] == pos ); // do not point to self
-                arrs[ i ][ pos * NVALS_PER_LINE ] =
+                arrs_i[ pos * NVALS_PER_LINE ] =
                     offsets[ rand_idx ] * NVALS_PER_LINE;
                 pos = offsets[ rand_idx ];
                 // swap the used offset to tail, so it would not be used again
                 std::swap( offsets[ rand_idx ], offsets[ size - j - 1 ] );
             }
-            arrs[ i ][ pos * NVALS_PER_LINE ] = 0;
+            arrs_i[ pos * NVALS_PER_LINE ] = 0;
             // last slot unset loops back to position 0
         }
     }
@@ -285,7 +296,7 @@ public:
 private:
 
     const std::size_t delay;
-    static std::size_t *arrs[ NUM_ARRS ];
+    static std::size_t *flatted_arr;
 };
 
 class Filter : public ChunkProcessingKernel
@@ -366,9 +377,13 @@ class Copy : public ChunkProcessingKernel
 {
 public:
     Copy( const std::size_t chunk_size,
-          int fanin ) :
+          int fanin,
+          const std::size_t rounds = 1,
+          const std::size_t nops = 0 ) :
         ChunkProcessingKernel( chunk_size ),
-        nfanins( fanin )
+        nfanins( fanin ),
+        nrounds( rounds ),
+        nnops( nops )
     {
 #if RAFTLIB_ORIG
         for( auto i( 0 ); fanin > i; ++i )
@@ -386,7 +401,9 @@ public:
 #if RAFTLIB_ORIG
     Copy( const Copy &other ) :
         ChunkProcessingKernel( other.size ),
-        nfanins( other.nfanins )
+        nfanins( other.nfanins ),
+        nrounds( other.nrounds ),
+        nnops( other.nnops )
     {
 #if RAFTLIB_ORIG
         for( auto i( 0 ); nfanins > i; ++i )
@@ -413,14 +430,14 @@ public:
             if( 0 < port.size() )
             {
                 auto &chunk( port.template peek< Chunk >() );
-                touch( chunk, 1, 0 );
+                touch( chunk, nrounds, nnops );
                 output[ "0"_port ].push( chunk );
                 port.recycle();
             }
         }
 #else
         auto &chunk( dataIn.template peek< Chunk >() );
-        touch( chunk, 1, 0 );
+        touch( chunk, nrounds, nnops );
         bufOut.push( chunk );
         dataIn.recycle();
 #endif
@@ -428,6 +445,9 @@ public:
     }
 
     const int nfanins;
+private:
+    const std::size_t nrounds;
+    const std::size_t nnops;
 };
 
 class Count : public ChunkProcessingKernel

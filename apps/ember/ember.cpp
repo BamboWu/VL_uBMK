@@ -738,12 +738,93 @@ void incast(const bool isMaster,
   }
 }
 
+void outcast(const bool isMaster,
+#ifdef ZMQ
+            zmq_msg_t *msg, void *queue
+#elif BOOST
+            double *msg, boost_q_t *queue
+#elif VL
+            double *msg, vlendpt_t *queue
+#elif CAF
+            double *msg, cafendpt_t *queue
+#endif
+            ) {
+  int i, j;
+#ifdef BOOST
+  const int ndoubles = msgSz / sizeof(double);
+  uint16_t idx;
+#elif VL
+  const int nblks = (msgSz + 55) / 56;
+  char buf[64];
+  uint16_t *blkId = (uint16_t*)buf; /* used to reorder cache blocks */
+  uint16_t idx;
+  size_t cnt;
+#elif CAF
+  char *buf = new char[msgSz];
+  char *pmsg;
+#endif
+  for (i = 0; repeats > i; ++i) {
+
+    if (isMaster) {
+      for (j = nthreads - 1; 0 < j; --j) {
+#ifdef ZMQ
+        assert(0 == zmq_msg_init_size(msg, msgSz));
+        assert(msgSz == zmq_msg_send(msg, queue, 0));
+#elif BOOST
+        for (idx = 0; ndoubles > idx; ++idx) {
+          while (!queue->push(*msg));
+        }
+#elif VL
+        for (idx = 0; nblks > idx; ++idx) {
+          *blkId = idx;
+          cnt = (nblks - 1) > idx ? 56 : (msgSz - idx * 56);
+          line_vl_push_strong(queue, (uint8_t*)buf, cnt + sizeof(uint16_t));
+        }
+#elif CAF
+        for (int i = 0; msgSz > i; ++i) {
+          buf[i] = 0;
+        }
+        caf_push_strong(queue, (uint64_t)buf);
+#ifdef CAF_PREPUSH
+        caf_prepush((void*)buf, msgSz);
+#endif
+#endif
+        if (sleep_nsec) {
+          compute(sleep_nsec);
+        }
+      }
+    } else {
+#ifdef ZMQ
+      assert(msgSz == zmq_msg_recv(msg, queue, 0));
+#elif BOOST
+      for (idx = 0; ndoubles > idx; ++idx) {
+        while (!queue->pop(*msg));
+      }
+#elif VL
+      for (idx = 0; nblks > idx; ++idx) {
+        line_vl_pop_weak(queue, (uint8_t*)buf, &cnt);
+      }
+#elif CAF
+      caf_pop_strong(queue, (uint64_t*)&pmsg);
+      memcpy((void*)buf, (void*)pmsg, msgSz);
+#endif
+      long sleep_tmp =
+          ((i % burst_period) > slow_period) ? -burst_amp : burst_amp;
+      sleep_tmp += sleep_nsec2;
+      if (0 < sleep_tmp) {
+        compute(sleep_tmp);
+      }
+    }
+  }
+}
+
+
 void *worker(void *arg) {
   int *pid = (int*) arg;
   //pinAtCoreFromList(*pid);
 
   bool isMaster = (0 == *pid);
-#ifdef EMBER_INCAST
+#if EMBER_INCAST || EMBER_OUTCAST
   if (isMaster) {
     printf("slow/fast span: %4ld / %4ld\n", slow_period, fast_period);
     printf("slave sleep:   %4ld +- %4ld\n", sleep_nsec2, burst_amp);
@@ -754,11 +835,20 @@ void *worker(void *arg) {
   void *queue;
   zmq_msg_t msg;
   if (isMaster) {
+#ifdef EMBER_INCAST
     queue = zmq_socket(ctx, ZMQ_PULL);
-    assert(0 == zmq_bind(queue, "inproc://0"));
     assert(0 == zmq_msg_init(&msg));
-  } else {
+#else
     queue = zmq_socket(ctx, ZMQ_PUSH);
+#endif
+    assert(0 == zmq_bind(queue, "inproc://0"));
+  } else {
+#ifdef EMBER_INCAST
+    queue = zmq_socket(ctx, ZMQ_PUSH);
+#else
+    queue = zmq_socket(ctx, ZMQ_PULL);
+    assert(0 == zmq_msg_init(&msg));
+#endif
     assert(0 == zmq_connect(queue, "inproc://0"));
   }
 #elif BOOST
@@ -769,9 +859,17 @@ void *worker(void *arg) {
   vlendpt_t endpt;
   vlendpt_t *queue = &endpt;
   if (isMaster) {
+#ifdef EMBER_INCAST
     open_byte_vl_as_consumer(1, queue, master_cacheline);
-  } else {
+#else
     open_byte_vl_as_producer(1, queue, 1);
+#endif
+  } else {
+#ifdef EMBER_INCAST
+    open_byte_vl_as_producer(1, queue, 1);
+#else
+    open_byte_vl_as_consumer(1, queue, 1);
+#endif
   }
 #elif CAF
   double msg;
@@ -929,6 +1027,8 @@ void *worker(void *arg) {
 
 #ifdef EMBER_INCAST
   incast(isMaster, &msg, queue);
+#elif EMBER_OUTCAST
+  outcast(isMaster, &msg, queue);
 #elif EMBER_SWEEP2D
   sweep(xUp, xDn, yUp, yDn, msg,
        xUpSend, xDnSend, yUpSend, yDnSend, xUpRecv, xDnRecv, yUpRecv, yDnRecv);

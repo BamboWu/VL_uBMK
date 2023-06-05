@@ -78,14 +78,12 @@ else()
 
   add_microbenchmark(firewall_qmd firewall.cpp)
   target_compile_definitions(firewall_qmd PRIVATE -DCAF=1
-                             -DNUM_STAGE2=4
                              -DCORRECT_READ -DCORRECT_WRITE
                              -DBULK_SIZE=8 -DPOOL_SIZE=56)
   target_link_libraries(firewall_qmd ${CAF_LIBRARY})
 
   add_microbenchmark(firewall_caf firewall.cpp)
   target_compile_definitions(firewall_caf PRIVATE -DCAF=1 -DCAF_PREPUSH
-                             -DNUM_STAGE2=4
                              -DCORRECT_READ -DCORRECT_WRITE
                              -DBULK_SIZE=8 -DPOOL_SIZE=56)
   target_link_libraries(firewall_caf ${CAF_LIBRARY})
@@ -103,6 +101,11 @@ else()
                              -DSTAGE2_READ -DSTAGE2_WRITE
                              -DBULK_SIZE=8 -DPOOL_SIZE=420)
   target_link_libraries(pipeline_boost ${Boost_LIBRARIES})
+  add_microbenchmark(firewall_boost firewall.cpp)
+  target_compile_definitions(firewall_boost PRIVATE -DBLFQ=1
+                             -DCORRECT_READ -DCORRECT_WRITE
+                             -DBULK_SIZE=8 -DPOOL_SIZE=56)
+  target_link_libraries(firewall_boost ${Boost_LIBRARIES})
 endif()
 
 if(NOT (ZMQ_STATIC_FOUND OR ZMQ_DYNAMIC_FOUND))
@@ -120,6 +123,15 @@ else()
   target_link_libraries(pipeline_zmq ${ZMQ_LIBRARY})
   if (ZMQ_STATIC_FOUND)
     target_compile_options(pipeline_zmq PRIVATE -static -pthread)
+  endif()
+  add_microbenchmark(firewall_zmq firewall.cpp)
+  target_include_directories(firewall_zmq PRIVATE ${ZMQ_INCLUDE_DIR})
+  target_compile_definitions(firewall_zmq PRIVATE -DZMQ=1
+                             -DCORRECT_READ -DCORRECT_WRITE
+                             -DBULK_SIZE=8 -DPOOL_SIZE=56)
+  target_link_libraries(firewall_zmq ${ZMQ_LIBRARY})
+  if (ZMQ_STATIC_FOUND)
+    target_compile_options(firewall_zmq PRIVATE -static -pthread)
   endif()
 endif()
 
